@@ -1,5 +1,5 @@
 import { useKeyboard, usePaste, useTerminalDimensions } from '@opentui/solid'
-import { type SlashCommand, suggestForPrefix } from 'nebula-ai-core'
+import { type SlashCommand, suggestForPrefix } from '../compat'
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js'
 import { summarizeApprovalSubject } from './approval-summary'
 import { MarkdownSegments } from './markdown'
