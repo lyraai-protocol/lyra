@@ -3,7 +3,7 @@ import type {
   PermissionMode,
   PermissionRequest,
   SlashCommand,
-} from 'nebula-ai-core'
+} from '../compat'
 import { createSignal } from 'solid-js'
 
 export type TurnRole =

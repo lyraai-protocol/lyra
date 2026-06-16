@@ -1,4 +1,4 @@
-import type { PermissionRequest } from 'nebula-ai-core'
+import type { PermissionRequest } from '../compat'
 import { shortAddr } from '../util/format'
 
 /**
