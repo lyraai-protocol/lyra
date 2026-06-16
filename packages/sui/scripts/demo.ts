@@ -29,6 +29,8 @@ import {
   mistToSui,
   type PolicyAction,
   policyFromEnv,
+  readBlob,
+  storeBlob,
   SUI_TYPE,
   suiToMist,
   txUrl,
@@ -104,6 +106,25 @@ async function main() {
   line(`mirror : allowed=${verdict.allowed} requiresApproval=${verdict.requiresApproval}`)
   if (!verdict.allowed) throw new Error(`mirror unexpectedly blocked: ${verdict.violations.join('; ')}`)
 
+  // Store the decision artifact on Walrus first, then link its blob id on-chain
+  // so the immutable receipt points at durable, verifiable memory.
+  const artifact = {
+    kind: 'lyra.receipt.v1',
+    network: cfg.network,
+    policyId,
+    agent: ownerAddr,
+    protocol: 'transfer',
+    coinType,
+    amountMist: ALLOWED_SPEND.toString(),
+    amountSui: mistToSui(ALLOWED_SPEND),
+    recipient,
+    status: 'executed',
+    ts: new Date().toISOString(),
+  }
+  const blob = await storeBlob(JSON.stringify(artifact, null, 2), { epochs: 1 })
+  line(`walrus : ${blob.blobId}`)
+  line(`         ${blob.url}`)
+
   const spendTx = new Transaction()
   buildWithdrawTransfer(spendTx, {
     packageId: cfg.packageId,
@@ -124,13 +145,16 @@ async function main() {
     amountMist: ALLOWED_SPEND,
     coinTypeStr: coinType,
     status: 'executed',
-    walrusBlob: '', // Walrus artifact wired in a later step
+    walrusBlob: blob.blobId,
   })
   const spendRes = await execute(client, owner, spendTx)
   const receiptId = createdObjectByType(spendRes, '::policy::ActionReceipt')
   line(`tx     : ${txUrl(cfg.network, spendRes.digest)}`)
   line(`sent   : ${mistToSui(ALLOWED_SPEND)} SUI to ${recipient}`)
-  line(`receipt: ${receiptId} (frozen, immutable)`)
+  line(`receipt: ${receiptId} (frozen, immutable, walrus=${blob.blobId.slice(0, 12)}…)`)
+
+  const fetched = await readBlob(blob.blobId)
+  line(`verify : Walrus artifact retrievable (${fetched.length} bytes), linked on-chain`)
 
   // --- 3. Blocked over-cap action ---------------------------------------
   h('3. BLOCKED action — over the per-tx cap')
