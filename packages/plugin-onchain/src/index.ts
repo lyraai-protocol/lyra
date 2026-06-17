@@ -32,6 +32,7 @@ import {
   makeScallopWithdraw,
 } from './tools/scallop'
 import { makeSuiSend } from './tools/send'
+import { makeSwap } from './tools/swap'
 import { makeWalrusStore } from './tools/walrus'
 import type { OnchainRuntimeContext } from './types'
 
@@ -65,6 +66,7 @@ const plugin: NativePlugin = {
     ctx.registerTool(makeAccountInfo(onchain) as ToolDef)
     ctx.registerTool(makeSuiBalance(onchain) as ToolDef)
     ctx.registerTool(makeSuiSend(onchain) as ToolDef)
+    ctx.registerTool(makeSwap(onchain) as ToolDef)
     ctx.registerTool(makePolicyShow(onchain) as ToolDef)
     ctx.registerTool(makePolicyCreate(onchain) as ToolDef)
     ctx.registerTool(makeWalrusStore(onchain) as ToolDef)
