@@ -1,0 +1,50 @@
+{
+  "name": "lyra-plugin-onchain",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Sui on-chain tools for Lyra: SUI transfers, DeepBook market data, Walrus receipts/memory — every write policy-checked, simulated, and recorded on-chain via lyra::policy",
+  "license": "MIT",
+  "homepage": "https://github.com/rifkyeasy/lyra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rifkyeasy/lyra.git",
+    "directory": "packages/plugin-onchain"
+  },
+  "bugs": {
+    "url": "https://github.com/rifkyeasy/lyra/issues"
+  },
+  "keywords": [
+    "lyra",
+    "ai",
+    "agent",
+    "sui",
+    "defi",
+    "deepbook",
+    "walrus",
+    "policy",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "files": ["src", "!src/**/*.test.ts", "README.md"],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cetusprotocol/aggregator-sdk": "^1.6.1",
+    "@mysten/deepbook-v3": "^0.18.0",
+    "@mysten/sui": "^1.40.0",
+    "@mysten/walrus": "^0.6.4",
+    "@scallop-io/sui-scallop-sdk": "^2.4.5",
+    "lyra-core": "workspace:*",
+    "navi-sdk": "^1.7.3",
+    "zod": "^3.23.8"
+  }
+}
