@@ -131,7 +131,9 @@ async function runNaviWrite(
       const [coin] = tx.splitCoins(tx.gas, [amountMist])
       await depositCoin(tx as never, suiPool as never, coin as never, Number(amountMist))
     } else {
-      const coin = await withdrawCoin(tx as never, suiPool as never, Number(amountMist))
+      // navi-sdk's withdrawCoin already wraps the withdrawn Balance into a Coin
+      // (via coin::from_balance) and returns [coin]; destructure and transfer it.
+      const [coin] = await withdrawCoin(tx as never, suiPool as never, Number(amountMist))
       tx.transferObjects([coin as never], ctx.agentAddress)
     }
 

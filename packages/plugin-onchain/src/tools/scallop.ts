@@ -154,11 +154,13 @@ async function runScallopWrite(
     const builder = await sdk.createScallopBuilder()
     const tx = builder.createTxBlock()
     tx.setSender(ctx.agentAddress)
-    // supplyQuick/withdrawQuick auto-select the user's coins and return the
-    // resulting coin to hand back to the owner.
+    // deposit/withdraw auto-select the user's coins and return the resulting
+    // coin to hand back to the owner. depositQuick's 3rd arg returnSCoin=false
+    // keeps the old market-coin standard, which withdrawQuick can redeem (the
+    // new sCoin standard is not found by withdrawQuick → "No valid coins").
     const out =
       kind === 'supply'
-        ? await tx.supplyQuick(Number(amountMist), 'sui')
+        ? await tx.depositQuick(Number(amountMist), 'sui', false)
         : await tx.withdrawQuick(Number(amountMist), 'sui')
     if (out) tx.transferObjects([out], ctx.agentAddress)
     const transaction = tx.txBlock
