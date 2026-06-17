@@ -1,18 +1,18 @@
-# nebula web console
+# lyra web console
 
-The browser surface for [nebula](../../README.md) — a Mantle-native, policy-aware
-AI treasury agent. Live at **[nebulaai.space](https://nebulaai.space)**.
+The browser surface for [lyra](../../README.md) — a Sui-native, policy-aware
+AI treasury agent. Live at **[lyraai.space](https://lyraai.space)**.
 
 A Next.js 15 app with three parts:
 
-- **Chat console** (`/console`) — prompt nebula in plain English. It answers with
-  **live on-chain data** (balances, portfolio, gas, yields, swap quotes, ERC-8004
+- **Chat console** (`/console`) — prompt lyra in plain English. It answers with
+  **live on-chain data** (balances, portfolio, gas, yields, swap quotes, lyra::policy
   lookups) and **executes** from your own wallet: transfers, wrap/unwrap, **swap**
-  (OpenOcean → Merchant Moe / Agni), **Aave** lend/borrow/repay/withdraw. Every
+  (OpenOcean → DeepBook / Cetus), **Scallop** lend/borrow/repay/withdraw. Every
   value-moving action is policy-capped, prepared server-side, and **signed by your
   connected wallet** — the server holds no key. Per-wallet chat history syncs
   server-side when you sign in.
-- **Agents** (`/console/agents`) — the ERC-8004 identities your wallet owns:
+- **Agents** (`/console/agents`) — the lyra::policy identities your wallet owns:
   agent card, reputation, validations.
 - **Docs** (`/docs`, `/llms.txt`) — the documentation site.
 
@@ -32,10 +32,9 @@ Environment (`.env.local`):
 
 | Var | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | LLM brain for `/api/chat` (any OpenAI-compatible; `NEBULA_LLM_BASE_URL`/`NEBULA_LLM_MODEL` optional) |
-| `SESSION_SECRET` | iron-session signing key for SIWE (≥32 chars; `openssl rand -hex 32`) |
-| `NEXT_PUBLIC_WC_PROJECT_ID` | WalletConnect/Reown project id (public client id) |
-| `NEBULA_POLICY_MAX_NATIVE_MNT` | per-tx native-MNT policy cap (default 25) |
+| `OPENAI_API_KEY` | LLM brain for `/api/chat` (any OpenAI-compatible; `LYRA_LLM_BASE_URL`/`LYRA_LLM_MODEL` optional) |
+| `SESSION_SECRET` | iron-session signing key for Sui sign-in (≥32 chars; `openssl rand -hex 32`) |
+| `LYRA_POLICY_MAX_NATIVE_MNT` | per-tx native-SUI policy cap (default 25) |
 
 Writes are signed client-side, so **no signer key lives on the server**.
 
@@ -54,8 +53,8 @@ runs it over SSH automatically on every push that touches `apps/web/**`.
 
 ## Notes
 
-- **Standalone**: this app has zero `nebula-ai-*` workspace imports, so it builds
-  with plain `npm` on a Node host (no bun required). Chain I/O via viem/wagmi.
+- **Standalone**: this app has zero `lyra-ai-*` workspace imports, so it builds
+  with plain `npm` on a Node host (no bun required). Chain I/O via /sui//dapp-kit.
 - The agent-wallet derivation is byte-identical to the CLI
   ([`packages/cli/src/profile/derive.ts`](../../packages/cli/src/profile/derive.ts)),
   so web and CLI resolve to the same wallet.
