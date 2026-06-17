@@ -28,6 +28,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@7kprotocol/sdk-ts": "^4.0.0",
     "@cetusprotocol/aggregator-sdk": "^1.6.1",
     "@mysten/deepbook-v3": "^0.18.0",
     "@mysten/sui": "^1.40.0",

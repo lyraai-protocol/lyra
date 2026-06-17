@@ -23,8 +23,8 @@ LYRA_PACKAGE_ID=0x250880a4...316885           # the deployed lyra::policy packag
 LYRA_POLICY_MAX_PER_TX_SUI=1.0                # hard cap: block any send over 1 SUI
 LYRA_POLICY_AUTO_MAX_SUI=0.1                  # auto up to 0.1 SUI; above → approval
 LYRA_POLICY_MAX_SLIPPAGE_BPS=100             # block swaps over 1% slippage
-LYRA_POLICY_ALLOWED_PROTOCOLS=transfer,deepbook,walrus,scallop,navi,cetus
-LYRA_POLICY_ALLOWED_COINS=0x2::sui::SUI
+LYRA_POLICY_ALLOWED_PROTOCOLS=transfer,deepbook,walrus,scallop,navi,cetus,swap
+LYRA_POLICY_ALLOWED_COINS=0x2::sui::SUI,<usdc>,<deep>,<wal>   # coins the agent may hold/acquire
 LYRA_POLICY_EXPIRY_MINUTES=60
 OPENAI_API_KEY=sk-...                          # any OpenAI-compatible key
 
@@ -83,7 +83,7 @@ The agent calls `policy.show` and reports the enforced boundary verbatim — har
 
 > **you:** what's the price of SUI?
 
-`deepbook.markets` returns live **DeepBook** spot mids; `cetus.quote` returns the best route across many Sui DEXes via the **Cetus aggregator** (verified: 1 SUI → 0.8140 USDC). Discovery + routing span the whole DEX landscape.
+`deepbook.markets` returns live **DeepBook** spot mids; `swap` **executes** a real swap through the **7k aggregator** (best route across Cetus / FlowX / Bluefin / DeepBook), policy-checked → simulated → executed (verified on mainnet: 1 SUI → 0.799 USDC via FlowX, digest `CYQPBQzAJoNUtMwa9KbbBkyodfBCcw3RxD4MKVpuhfdg`; reverse 1 USDC → 1.253 SUI). It tries routes in output order, skipping any that don't simulate cleanly. `cetus.quote` gives a read-only quote. Discovery, routing, and execution span the whole DEX landscape.
 
 ## 9. Same agent, four interfaces
 
