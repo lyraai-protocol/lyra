@@ -130,9 +130,10 @@ public struct AgentRotated has copy, drop {
 
 // === Create ===
 
-/// Create a shared `AgentPolicy` and transfer its `PolicyOwnerCap` to the
-/// caller. The caller becomes `owner`; `agent` is the delegated spender.
-entry fun create_policy(
+/// Composable constructor: build an `AgentPolicy` + its `PolicyOwnerCap` and
+/// return them (caller becomes `owner`). Lets `lyra::vault::provision` create a
+/// policy + vault in a single PTB. `create_policy` is the entry wrapper.
+public fun new_policy(
     agent: address,
     budget_mist: u64,
     max_per_tx_mist: u64,
@@ -142,7 +143,7 @@ entry fun create_policy(
     expiry_ms: u64,
     clock: &Clock,
     ctx: &mut TxContext,
-) {
+): (AgentPolicy, PolicyOwnerCap) {
     let owner = ctx.sender();
     let policy = AgentPolicy {
         id: object::new(ctx),
@@ -168,8 +169,41 @@ entry fun create_policy(
         max_per_tx_mist,
         expiry_ms,
     });
+    (policy, cap)
+}
+
+/// Share a freshly-built `AgentPolicy` (key-only, so only this module may share
+/// it). Lets `lyra::vault::provision` compose `new_policy` then publish it.
+public fun share_policy(policy: AgentPolicy) {
     transfer::share_object(policy);
-    transfer::public_transfer(cap, owner);
+}
+
+/// Create a shared `AgentPolicy` and transfer its `PolicyOwnerCap` to the
+/// caller. The caller becomes `owner`; `agent` is the delegated spender.
+entry fun create_policy(
+    agent: address,
+    budget_mist: u64,
+    max_per_tx_mist: u64,
+    max_slippage_bps: u64,
+    allowed_coins: vector<vector<u8>>,
+    allowed_protocols: vector<address>,
+    expiry_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let (policy, cap) = new_policy(
+        agent,
+        budget_mist,
+        max_per_tx_mist,
+        max_slippage_bps,
+        allowed_coins,
+        allowed_protocols,
+        expiry_ms,
+        clock,
+        ctx,
+    );
+    transfer::public_transfer(cap, ctx.sender());
+    transfer::share_object(policy);
 }
 
 // === Enforce ===

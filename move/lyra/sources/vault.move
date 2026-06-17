@@ -72,6 +72,41 @@ entry fun open<T>(policy: &AgentPolicy, ctx: &mut TxContext) {
     transfer::share_object(new<T>(policy, ctx));
 }
 
+/// One-signature onboarding. The owner (caller) creates an `AgentPolicy`
+/// delegating to `agent`, opens a vault of coin `T`, deposits `funds`, and
+/// receives the `PolicyOwnerCap` — all atomically. The policy + vault are shared;
+/// the cap goes to the owner. After this, the delegated agent can `vault_spend`
+/// within the policy, and the owner can `owner_withdraw` / revoke any time.
+entry fun provision<T>(
+    agent: address,
+    budget_mist: u64,
+    max_per_tx_mist: u64,
+    max_slippage_bps: u64,
+    allowed_coins: vector<vector<u8>>,
+    allowed_protocols: vector<address>,
+    expiry_ms: u64,
+    funds: Coin<T>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let (policy, cap) = policy::new_policy(
+        agent,
+        budget_mist,
+        max_per_tx_mist,
+        max_slippage_bps,
+        allowed_coins,
+        allowed_protocols,
+        expiry_ms,
+        clock,
+        ctx,
+    );
+    let mut vault = new<T>(&policy, ctx);
+    deposit(&mut vault, funds);
+    transfer::public_transfer(cap, ctx.sender());
+    policy::share_policy(policy);
+    transfer::share_object(vault);
+}
+
 /// Deposit funds into the vault. Anyone may fund it (typically the owner).
 public fun deposit<T>(vault: &mut Vault<T>, coin: Coin<T>) {
     let amount = coin.value();
