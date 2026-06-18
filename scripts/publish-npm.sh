@@ -28,10 +28,17 @@ echo
 
 for p in "${PACKAGES[@]}"; do
   name="$(grep -m1 '"name"' "packages/$p/package.json" | sed -E 's/.*"name": *"([^"]+)".*/\1/')"
-  echo "──> publishing ${name}  (packages/$p)"
+  ver="$(grep -m1 '"version"' "packages/$p/package.json" | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
+  # Idempotent: skip any package whose version is already on npm (so a single
+  # bumped package can be published without 403-ing on the unchanged ones).
+  if npm view "${name}@${ver}" version >/dev/null 2>&1; then
+    echo "──  skip ${name}@${ver}  (already on npm)"
+    continue
+  fi
+  echo "──> publishing ${name}@${ver}  (packages/$p)"
   ( cd "packages/$p" && bun publish )
-  echo "    done: ${name}"
+  echo "    done: ${name}@${ver}"
   echo
 done
 
-echo "✓ All packages published. Try it:  bun install -g lyra-ai-agent  &&  lyra"
+echo "✓ Done. Try it:  bun install -g lyra-ai-agent  &&  lyra"
