@@ -7,6 +7,7 @@
 // on-chain AgentPolicy. The server never signs these owner actions.
 
 import { useSuiAuth } from '@/components/SuiAuthContext'
+import { TxResultDialog, type TxResult } from '@/components/console/TxResultDialog'
 import { accountUrl } from '@/lib/chainscan'
 import { shortAddress } from '@/lib/format'
 import { CLOCK, SUI_TYPE } from '@/lib/onchain-constants'
@@ -40,6 +41,7 @@ export function AgentWalletBar() {
   const [payeeInput, setPayeeInput] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [result, setResult] = useState<TxResult | null>(null)
 
   const refresh = useCallback(() => {
     fetch('/api/agent', { cache: 'no-store' })
@@ -75,17 +77,21 @@ export function AgentWalletBar() {
           onSuccess: r => {
             setBusy(null)
             setMsg(`✓ ${label} (${r.digest.slice(0, 8)}…)`)
+            setResult({ kind: 'success', label, digest: r.digest })
             setTimeout(refresh, 1500)
           },
           onError: e => {
             setBusy(null)
             setMsg(`✗ ${e.message.slice(0, 90)}`)
+            setResult({ kind: 'error', label, error: e.message })
           },
         },
       )
     } catch (e) {
       setBusy(null)
-      setMsg(`✗ ${(e as Error).message.slice(0, 90)}`)
+      const message = (e as Error).message
+      setMsg(`✗ ${message.slice(0, 90)}`)
+      setResult({ kind: 'error', label, error: message })
     }
   }
 
@@ -254,6 +260,8 @@ export function AgentWalletBar() {
           </Btn>
         </div>
       ) : null}
+
+      <TxResultDialog result={result} onClose={() => setResult(null)} />
     </div>
   )
 }

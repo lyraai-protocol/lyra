@@ -7,6 +7,7 @@
 // runs the action with the agent key under the on-chain AgentPolicy's bounds.
 
 import { useSuiAuth } from '@/components/SuiAuthContext'
+import { TxResultDialog, type TxResult } from '@/components/console/TxResultDialog'
 import type { PendingAction } from '@/lib/chat-store'
 import { useState } from 'react'
 
@@ -19,6 +20,7 @@ type Status =
 export function ActionCard({ action }: { action: PendingAction }) {
   const { isAuthed } = useSuiAuth()
   const [status, setStatus] = useState<Status>({ phase: 'idle' })
+  const [result, setResult] = useState<TxResult | null>(null)
 
   const title =
     action.kind === 'transfer'
@@ -38,10 +40,18 @@ export function ActionCard({ action }: { action: PendingAction }) {
         body: JSON.stringify({ action }),
       })
       const data = (await res.json()) as { ok: boolean; digest?: string; route?: string; error?: string }
-      if (data.ok && data.digest) setStatus({ phase: 'done', digest: data.digest, route: data.route })
-      else setStatus({ phase: 'error', message: data.error ?? `failed (${res.status})` })
+      if (data.ok && data.digest) {
+        setStatus({ phase: 'done', digest: data.digest, route: data.route })
+        setResult({ kind: 'success', label: title, digest: data.digest })
+      } else {
+        const message = data.error ?? `failed (${res.status})`
+        setStatus({ phase: 'error', message })
+        setResult({ kind: 'error', label: title, error: message })
+      }
     } catch (e) {
-      setStatus({ phase: 'error', message: (e as Error).message.slice(0, 180) })
+      const message = (e as Error).message.slice(0, 180)
+      setStatus({ phase: 'error', message })
+      setResult({ kind: 'error', label: title, error: message })
     }
   }
 
@@ -93,6 +103,8 @@ export function ActionCard({ action }: { action: PendingAction }) {
         Your policy-bound agent wallet signs this — checked against the on-chain AgentPolicy. You
         never expose a key; sign-in just proves you're the owner.
       </p>
+
+      <TxResultDialog result={result} onClose={() => setResult(null)} />
     </div>
   )
 }
