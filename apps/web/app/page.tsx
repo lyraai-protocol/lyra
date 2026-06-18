@@ -15,8 +15,8 @@ export default function LandingPage() {
     <main className="relative min-h-screen bg-[var(--color-cream)] text-[var(--color-ink)]">
       <Navbar />
       <Hero />
-      <V1Opener />
       <IntegratedProtocols />
+      <V1Opener />
       <Footer />
     </main>
   )
