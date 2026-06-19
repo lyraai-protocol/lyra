@@ -14,7 +14,11 @@
  * derives for that owner — so the CLI and the web operate one identical agent.
  */
 
+import { existsSync } from 'node:fs'
+import { agentPaths } from 'lyra-core'
 import { keypairFromSecret } from 'lyra-plugin-onchain'
+import { DEFAULT_NETWORK } from '../config/defaults'
+import { finalizeSetup } from '../config/setup'
 import { writeAgentKey } from '../util/sui-runtime'
 
 /** Default web origin; override with LYRA_WEB_URL for local/staging testing. */
@@ -150,6 +154,18 @@ export async function runLogin(): Promise<void> {
     console.log(`✓ Linked agent ${result.address} (same as your web wallet)`)
     console.log(`  owner ${result.owner}`)
     console.log(`  key   ${result.keyPath}`)
+
+    // Login used to write ONLY the agent key, leaving `lyra` (chat) with no config
+    // to load. Write a runnable config (defaults) when one doesn't exist yet so the
+    // device-link is a complete setup; never clobber an existing config.
+    if (!existsSync(agentPaths.config)) {
+      await finalizeSetup({
+        agentAddress: result.address,
+        linkedOwner: result.owner,
+        network: DEFAULT_NETWORK,
+      })
+      console.log(`  config ${agentPaths.config}`)
+    }
     console.log('')
     console.log('Next: `lyra` to chat · `lyra status` for health')
   } catch (e) {

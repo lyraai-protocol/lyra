@@ -160,6 +160,6 @@ main()
     process.exit(0)
   })
   .catch(e => {
-    console.error('fatal:', (e as Error).message)
+    console.error('fatal:', (e as Error)?.message ?? e)
     process.exit(1)
   })
