@@ -33,6 +33,8 @@ describe('config defaults (zero-env-var)', () => {
     expect(DEFAULT_ALLOWED_PROTOCOLS).toEqual([
       'transfer',
       'swap',
+      'stake',
+      'borrow',
       'deepbook',
       'scallop',
       'navi',
@@ -66,7 +68,9 @@ describe('config defaults (zero-env-var)', () => {
     expect(env.LYRA_POLICY_AUTO_MAX_SUI).toBe('0.1')
     expect(env.LYRA_POLICY_MAX_SLIPPAGE_BPS).toBe('100')
     expect(env.LYRA_POLICY_ALLOWED_COINS).toBe('0x2::sui::SUI')
-    expect(env.LYRA_POLICY_ALLOWED_PROTOCOLS).toBe('transfer,swap,deepbook,scallop,navi,walrus')
+    expect(env.LYRA_POLICY_ALLOWED_PROTOCOLS).toBe(
+      'transfer,swap,stake,borrow,deepbook,scallop,navi,walrus',
+    )
   })
 
   test('hasNoPolicyEnv: true with no policy vars, false when any set', () => {
