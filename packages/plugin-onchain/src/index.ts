@@ -77,6 +77,13 @@ export { deriveAgentKeypair, deriveAgentAddress } from './derive'
 export { resolveOwnerVault, type OwnerVault } from './vault'
 export { ONCHAIN_GUIDANCE } from './guidance'
 export type { OnchainRuntimeContext } from './types'
+export {
+  PROTOCOL_IDS,
+  PROTOCOL_LABELS,
+  ALLOWLISTABLE_PROTOCOLS,
+  NO_PROTOCOL,
+  type ProtocolKey,
+} from './protocol-ids'
 
 const plugin: NativePlugin = {
   name: 'onchain',

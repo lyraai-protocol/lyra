@@ -9,7 +9,7 @@
 
 /** Deployed `lyra::policy` Move package on mainnet (on-chain receipts). */
 export const DEFAULT_PACKAGE_ID =
-  '0x811bb37d66e8639e205bd41003a7fb8121133faa68abcf0b17488794c34823d5'
+  '0x8ffdbda0bec2e3604757d435c567d52451317ed5752cef8fc5321a1050872cbf'
 
 /** Default Sui network. */
 export const DEFAULT_NETWORK = 'mainnet' as const
