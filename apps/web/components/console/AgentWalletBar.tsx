@@ -13,6 +13,7 @@ import { shortAddress } from '@/lib/format'
 import { CLOCK, SUI_TYPE } from '@/lib/onchain-constants'
 import { useSignAndExecuteTransaction } from '@mysten/dapp-kit'
 import { Transaction } from '@mysten/sui/transactions'
+import { ALLOWLISTABLE_PROTOCOLS, NO_PROTOCOL } from 'lyra-plugin-onchain'
 import QRCode from 'qrcode'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -22,6 +23,7 @@ type VaultInfo = {
   capId: string
   vaultMist: string
   allowedRecipients: string[] | null
+  allowedProtocols: string[]
 }
 type AgentInfo = {
   owner: string | null
@@ -192,8 +194,42 @@ export function AgentWalletBar() {
       return tx
     })
 
+  // Set which yield protocols the agent may deploy vault funds into. Empty = any
+  // protocol (fully open). A non-empty list always includes 0x0 (the transfer/swap
+  // tag) so restricting protocols never blocks a plain transfer or swap.
+  const setProtocols = (ids: string[]) =>
+    run(ids.length ? 'restrict protocols' : 'allow any protocol', () => {
+      const v = vault as VaultInfo
+      const list = ids.length ? [...ids, NO_PROTOCOL] : []
+      const tx = new Transaction()
+      tx.moveCall({
+        target: `${pkg}::policy::set_allowed_protocols`,
+        arguments: [
+          tx.object(v.policyId),
+          tx.object(v.capId),
+          tx.makeMoveVec({ type: 'address', elements: list.map(a => tx.pure.address(a)) }),
+        ],
+      })
+      return tx
+    })
+
   const payees = vault?.allowedRecipients ?? null
   const restricted = Array.isArray(payees) && payees.length > 0
+
+  // Protocol allowlist UI state. An empty on-chain list = open (all allowed), so
+  // every toggle shows "on"; unchecking one restricts to the rest. Re-checking all
+  // collapses back to the open ([]) state.
+  const allProtoIds = ALLOWLISTABLE_PROTOCOLS.map(p => p.id)
+  const savedProtocols = (vault?.allowedProtocols ?? []).filter(id => allProtoIds.includes(id))
+  const protoRestricted = savedProtocols.length > 0
+  const effectiveProtocols = protoRestricted ? savedProtocols : allProtoIds
+  const protoAllowed = (id: string) => effectiveProtocols.includes(id)
+  const toggleProtocol = (id: string) => {
+    const cur = new Set(effectiveProtocols)
+    cur.has(id) ? cur.delete(id) : cur.add(id)
+    const next = Array.from(cur)
+    setProtocols(next.length === allProtoIds.length ? [] : next)
+  }
 
   return (
     <div className="border-b border-[var(--color-border)] font-mono text-[12px] text-[var(--color-ink-2)]">
@@ -317,6 +353,40 @@ export function AgentWalletBar() {
           <Btn onClick={() => setPayees([])} busy={busy === 'allow any'}>
             allow any
           </Btn>
+        </div>
+      ) : null}
+
+      {vault ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-[var(--color-border)] px-5 py-1.5">
+          <span className="text-[var(--color-ink-3)]">protocols</span>
+          <span className={protoRestricted ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-3)]'}>
+            {protoRestricted ? `restricted to ${effectiveProtocols.length}` : 'any (open)'}
+          </span>
+          <span className="mx-1 h-3 w-px bg-[var(--color-border)]" />
+          {ALLOWLISTABLE_PROTOCOLS.map(p => {
+            const on = protoAllowed(p.id)
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => toggleProtocol(p.id)}
+                disabled={busy != null}
+                className={`rounded-full border px-2 py-0.5 text-[10.5px] transition-colors disabled:opacity-50 ${
+                  on
+                    ? 'border-[var(--color-ink-3)] text-[var(--color-ink)]'
+                    : 'border-[var(--color-border)] text-[var(--color-ink-3)] line-through'
+                }`}
+                title={on ? `${p.label} allowed — click to block` : `${p.label} blocked — click to allow`}
+              >
+                {p.label}
+              </button>
+            )
+          })}
+          {protoRestricted ? (
+            <Btn onClick={() => setProtocols([])} busy={busy === 'allow any protocol'}>
+              allow any
+            </Btn>
+          ) : null}
         </div>
       ) : null}
 

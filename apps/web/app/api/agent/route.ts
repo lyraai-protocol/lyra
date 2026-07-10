@@ -36,6 +36,7 @@ export async function GET() {
             capId: ov.capId,
             vaultMist: ov.vaultMist,
             allowedRecipients: ov.allowedRecipients,
+            allowedProtocols: ov.allowedProtocols,
           }
         : null,
     })

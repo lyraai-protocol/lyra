@@ -14,6 +14,7 @@ import { NAVISDKClient, borrowCoin, depositCoin, pool, repayDebt, withdrawCoin }
 import { z } from 'zod'
 import { checkMinimum } from '../minimums'
 import { evaluatePolicy, suiToMist } from '../policy'
+import { PROTOCOL_IDS } from '../protocol-ids'
 import { simulate } from '../simulate'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui, returnSuiToVault } from '../vault-fund'
@@ -145,7 +146,7 @@ async function runNaviWrite(
     if (kind === 'supply') {
       // Source the supply from the treasury vault (policy-enforced) when wired.
       const coin = fundSui(tx, ctx, amountMist, {
-        protocol: '0x0',
+        protocol: PROTOCOL_IDS.navi,
         kind: 'supply',
         memo: 'navi supply',
       })
@@ -166,7 +167,7 @@ async function runNaviWrite(
     } else {
       // repay: draw the repayment from the vault (policy-enforced) and pay the debt.
       const coin = fundSui(tx, ctx, amountMist, {
-        protocol: '0x0',
+        protocol: PROTOCOL_IDS.navi,
         kind: 'repay',
         memo: 'navi repay',
       })

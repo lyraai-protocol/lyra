@@ -24,6 +24,12 @@ export interface OwnerVault {
   vaultMist: string
   /** Allowed transfer recipients; null = open (any), [] = locked to none. */
   allowedRecipients: string[] | null
+  /**
+   * Allowed yield protocols (package ids) the agent may deploy vault funds into.
+   * Empty = any protocol. `0x0` (transfers/swaps) is always allowed and filtered
+   * out of this list for display.
+   */
+  allowedProtocols: string[]
 }
 
 /** Read the policy's recipient allowlist (dynamic field). null = no allowlist set. */
@@ -72,7 +78,20 @@ export async function resolveOwnerVault(owner: string): Promise<OwnerVault | nul
     const capId = c.data?.objectId
     if (!capId) continue
     const allowedRecipients = await readAllowedRecipients(policyId)
-    return { policyId, vaultId, capId, agent, vaultMist: String(vaultMist), allowedRecipients }
+    // allowed_protocols is a struct-field vector on the policy object; 0x0 (the
+    // always-allowed transfer/swap tag) is filtered out for display.
+    // biome-ignore lint/suspicious/noExplicitAny: dynamic Move object fields
+    const rawProtocols = ((pf as any)?.allowed_protocols ?? []) as string[]
+    const allowedProtocols = rawProtocols.filter(p => !/^0x0+$/.test(p))
+    return {
+      policyId,
+      vaultId,
+      capId,
+      agent,
+      vaultMist: String(vaultMist),
+      allowedRecipients,
+      allowedProtocols,
+    }
   }
   return null
 }

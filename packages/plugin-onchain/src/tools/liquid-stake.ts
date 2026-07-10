@@ -16,6 +16,7 @@ import { stakeTovSuiPTB, unstakeTovSui } from 'navi-sdk'
 import { z } from 'zod'
 import { checkMinimum } from '../minimums'
 import { evaluatePolicy, suiToMist } from '../policy'
+import { PROTOCOL_IDS } from '../protocol-ids'
 import { simulate } from '../simulate'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui } from '../vault-fund'
@@ -64,7 +65,7 @@ export function makeVoloStake(ctx: OnchainRuntimeContext): ToolDef<StakeArgs> {
         const tx = new Transaction()
         // Source the stake from the treasury vault (policy-enforced) when wired.
         const suiCoin = fundSui(tx, ctx, amountMist, {
-          protocol: '0x0',
+          protocol: PROTOCOL_IDS.volo,
           kind: 'stake',
           memo: 'volo liquid stake',
         })

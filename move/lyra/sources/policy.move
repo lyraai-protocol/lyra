@@ -515,7 +515,14 @@ fun coin_allowed(policy: &AgentPolicy, coin_type: &vector<u8>): bool {
 }
 
 fun protocol_allowed(policy: &AgentPolicy, protocol: address): bool {
-    policy.allowed_protocols.is_empty() || policy.allowed_protocols.contains(&protocol)
+    // @0x0 is the reserved "no specific protocol" tag: transfers and swaps use it
+    // (they're bounded by budget/per-tx cap/coin/recipient/slippage instead), so
+    // it is ALWAYS allowed — setting a protocol allowlist restricts only named
+    // yield protocols (staking/lending/liquid-staking) and never blocks a plain
+    // transfer or swap. Otherwise: empty allowlist = any, else must be listed.
+    protocol == @0x0
+        || policy.allowed_protocols.is_empty()
+        || policy.allowed_protocols.contains(&protocol)
 }
 
 // === Tests ===
@@ -805,6 +812,23 @@ fun set_protocols_replaces_allowlist() {
     assert!(policy.would_allow<SUI>(100, @0xDEE9, &clk));
 
     destroy(cap);
+    destroy(policy);
+    clock::destroy_for_testing(clk);
+}
+
+#[test]
+fun zero_protocol_always_allowed_under_allowlist() {
+    let mut ctx = tx_context::dummy();
+    let clk = clock::create_for_testing(&mut ctx);
+    // Restrict to a single named yield protocol.
+    let mut policy = mk(10_000, 10_000, 0, vector[], vector[@0xDEE9], &mut ctx);
+    // A named protocol not in the list is blocked...
+    assert!(!policy.would_allow<SUI>(100, @0xBEEF, &clk));
+    // ...but @0x0 (the transfer/swap tag) is ALWAYS allowed, even under the
+    // allowlist — so restricting protocols never blocks a plain transfer or swap.
+    assert!(policy.would_allow<SUI>(100, @0x0, &clk));
+    let r = enforce_spend<SUI>(&mut policy, 100, @0x0, b"transfer", b"", &clk, &mut ctx);
+    destroy(r);
     destroy(policy);
     clock::destroy_for_testing(clk);
 }
