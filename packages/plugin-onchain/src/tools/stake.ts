@@ -15,11 +15,10 @@ import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
 import { checkMinimum } from '../minimums'
 import { evaluatePolicy, suiToMist } from '../policy'
+import { PROTOCOL_IDS } from '../protocol-ids'
 import { simulate } from '../simulate'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui } from '../vault-fund'
-
-const SUI_SYSTEM_PKG = '0x3'
 
 const SUI_TYPE = '0x2::sui::SUI'
 const SUI_SYSTEM_STATE = '0x5'
@@ -91,7 +90,7 @@ export function makeStake(ctx: OnchainRuntimeContext): ToolDef<StakeArgs> {
         // Source the stake from the treasury vault (policy-enforced) when one is
         // wired; otherwise from the agent's gas coin (single-key mode).
         const coin = fundSui(tx, ctx, amountMist, {
-          protocol: SUI_SYSTEM_PKG,
+          protocol: PROTOCOL_IDS.suiStaking,
           kind: 'stake',
           memo: `stake ${args.amount} SUI`,
         })
