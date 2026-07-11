@@ -20,4 +20,4 @@ You don't usually run this directly — `lyra gateway start` (from
 Touch ID + a cached operator session, decrypts the local keystore, and brings the
 listeners online. Documented here for transparency.
 
-See the [root README](https://github.com/rifkyeasy/lyra#readme).
+See the [root README](https://github.com/lyraai-protocol/lyra#readme).

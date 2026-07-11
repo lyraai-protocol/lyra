@@ -14,4 +14,4 @@ running untrusted shell + code, even when a command is granted.
 Auto-installed with [`lyra-ai-agent`](https://www.npmjs.com/package/lyra-ai-agent).
 Or directly: `bun add lyra-plugin-system`.
 
-See the [root README](https://github.com/rifkyeasy/lyra#readme).
+See the [root README](https://github.com/lyraai-protocol/lyra#readme).

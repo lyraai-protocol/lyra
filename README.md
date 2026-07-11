@@ -81,7 +81,7 @@ lyra logs        # tail the activity log
 | Interface | Run it | Identity |
 | --- | --- | --- |
 | **CLI** | `lyra` | local config (you hold the key) |
-| **Web** | https://lyraai.space, or self-host (`apps/web`) | Sign-In-with-Sui |
+| **Web** | https://app.lyraai.space (console), or self-host (`apps/app`) | Sign-In-with-Sui |
 | **Gateway** | `lyra gateway start` (always-on HTTP/socket daemon) | local |
 | **Telegram** | `lyra telegram setup` → `lyra gateway start` | `/link` (sign a challenge) |
 
@@ -100,46 +100,59 @@ Off-chain policy engine ──► simulate (dry-run) ──► execute
       │                                              │
       └──────────────► lyra::vault::vault_spend ◄─────┘
                        re-runs lyra::policy in Move:
-                       agent? budget? per-tx? coin? protocol? recipient? expiry? revoked?
+                       version? agent? budget? per-tx? coin? protocol? recipient? expiry? revoked?
                        └► releases Coin from the on-chain Vault + mints ActionReceipt
 ```
 
-- **`lyra::policy`** — the `AgentPolicy` shared object: budget, caps, allowlists,
-  recipient allowlist (anti prompt-injection), expiry, revoke.
-- **`lyra::vault`** — the treasury `Vault<T>`; `vault_spend` / `vault_transfer` enforce
-  the policy on-chain; `owner_withdraw` is your escape hatch.
+The on-chain package is five focused Move modules (in its own repo,
+[`lyraai-protocol/contracts`](https://github.com/lyraai-protocol/contracts)):
+
+- **`lyra::policy`** — the `AgentPolicy` gate: budget, per-tx cap, coin/protocol/
+  recipient allowlists (anti prompt-injection), expiry, revoke, and a version guard.
+- **`lyra::vault`** — the treasury `Vault<T>`; `vault_spend` / `vault_transfer` re-run
+  the policy on-chain; `owner_withdraw` is your escape hatch (never version-trapped).
+- **`lyra::receipt`** — the immutable `ActionReceipt` audit artifact; only the gate mints it.
+- **`lyra::allowlist` / `lyra::constants`** — reusable allowlist rules + the shared version.
 - **Walrus** — durable, verifiable receipts/memory.
 - **Aggregated execution** — swaps route across Cetus / FlowX / Bluefin / DeepBook (7k).
+
+An upgrade can pause the agent's spend path (until the owner `migrate`s a policy/vault),
+but owner controls — revoke, re-scope, `owner_withdraw` — are never version-gated, so an
+upgrade can never trap your funds.
 
 ---
 
 ## Develop
 
 ```bash
-git clone https://github.com/rifkyeasy/lyra.git && cd lyra
+git clone https://github.com/lyraai-protocol/lyra.git && cd lyra
 bun install
-bun test                              # 930 TS tests
-sui move test --path move/lyra        # 21 Move tests
-cd apps/web && bun run dev            # web console on :3210
+bun test                              # TS test suite
 ```
 
-Monorepo layout:
+The **Move package lives in its own repo**,
+[`lyraai-protocol/contracts`](https://github.com/lyraai-protocol/contracts) —
+`sui move build` / `sui move test` (37 Move tests).
+
+Org layout:
 ```
-move/lyra            on-chain policy + vault (Move)
-packages/core        agent runtime / brain (tool loop)
-packages/plugin-onchain   Sui tools: send, swap, lend, walrus, vault, policy
-packages/plugin-telegram  Telegram interface (/link, listener)
-packages/gateway     always-on daemon
-packages/cli         the `lyra` CLI
-apps/web             Next.js web console (dapp-kit + SIWS)
+lyraai-protocol/lyra        this repo — agent runtime, tools, CLI, gateway
+  packages/core             agent runtime / brain (tool loop)
+  packages/plugin-onchain   Sui tools: send, swap, lend, stake, walrus, vault, policy
+  packages/plugin-telegram  Telegram interface (/link, listener)
+  packages/gateway          always-on daemon
+  packages/cli              the `lyra` CLI
+lyraai-protocol/contracts   the Move package (policy · vault · receipt · allowlist · constants)
+lyraai-protocol/app         app.lyraai.space — Next.js console (dapp-kit + SIWS)
+lyraai-protocol/landing     lyraai.space — marketing + research
+lyraai-protocol/api         api.lyraai.space — Bun + Hono + SQLite (article store)
 ```
 
-## Deploy (web)
+## Deploy
 
-The web console auto-deploys on push to `main` via GitHub Actions
-(`.github/workflows/deploy.yml`) → SSH to the host → `scripts/deploy-vps.sh`
-(build → atomic swap → `pm2 reload`). See the script for the self-host recipe
-(nginx reverse proxy + certbot TLS).
+- **Console** (`app.lyraai.space`) + **landing** (`lyraai.space`) — Next.js on
+  **Netlify**, auto-deployed on push to `main` via each repo's GitHub Actions.
+- **API** (`api.lyraai.space`) — a Bun + Hono service behind TLS.
 
 ## Security
 

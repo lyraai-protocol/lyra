@@ -28,4 +28,4 @@ Auto-installed with [`lyra-ai-agent`](https://www.npmjs.com/package/lyra-ai-agen
 Or directly: `bun add lyra-plugin-telegram`.
 
 Built on [grammy](https://grammy.dev) (TS-first, bun-compatible). See the
-[root README](https://github.com/rifkyeasy/lyra#readme).
+[root README](https://github.com/lyraai-protocol/lyra#readme).
