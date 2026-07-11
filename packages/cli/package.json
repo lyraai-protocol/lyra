@@ -4,38 +4,23 @@
   "type": "module",
   "description": "lyra CLI: a Sui-native, policy-bound AI finance agent. Real on-chain work gated by deterministic policy, simulation, and approval",
   "license": "MIT",
-  "homepage": "https://github.com/rifkyeasy/lyra",
+  "homepage": "https://github.com/lyraai-protocol/lyra",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rifkyeasy/lyra.git",
+    "url": "git+https://github.com/lyraai-protocol/lyra.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/rifkyeasy/lyra/issues"
+    "url": "https://github.com/lyraai-protocol/lyra/issues"
   },
-  "keywords": [
-    "lyra",
-    "ai",
-    "agent",
-    "cli",
-    "tui",
-    "sui",
-    "walrus",
-    "deepbook",
-    "defi"
-  ],
+  "keywords": ["lyra", "ai", "agent", "cli", "tui", "sui", "walrus", "deepbook", "defi"],
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "bun": ">=1.1"
   },
-  "files": [
-    "src",
-    "!src/**/*.test.ts",
-    "bin",
-    "README.md"
-  ],
+  "files": ["src", "!src/**/*.test.ts", "bin", "README.md"],
   "bin": {
     "lyra": "bin/lyra"
   },

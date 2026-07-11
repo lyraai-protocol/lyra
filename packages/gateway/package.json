@@ -4,35 +4,23 @@
   "type": "module",
   "description": "Lyra gateway daemon: the always-on local brain runtime + listeners (Telegram, approvals) for the lyra agent",
   "license": "MIT",
-  "homepage": "https://github.com/rifkyeasy/lyra",
+  "homepage": "https://github.com/lyraai-protocol/lyra",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rifkyeasy/lyra.git",
+    "url": "git+https://github.com/lyraai-protocol/lyra.git",
     "directory": "packages/gateway"
   },
   "bugs": {
-    "url": "https://github.com/rifkyeasy/lyra/issues"
+    "url": "https://github.com/lyraai-protocol/lyra/issues"
   },
-  "keywords": [
-    "lyra",
-    "ai",
-    "agent",
-    "gateway",
-    "daemon",
-    "sui"
-  ],
+  "keywords": ["lyra", "ai", "agent", "gateway", "daemon", "sui"],
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "bun": ">=1.1"
   },
-  "files": [
-    "src",
-    "!src/**/*.test.ts",
-    "bin",
-    "README.md"
-  ],
+  "files": ["src", "!src/**/*.test.ts", "bin", "README.md"],
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "bin": {
