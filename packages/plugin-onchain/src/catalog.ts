@@ -66,27 +66,89 @@ export interface CatalogEntry {
 
 export const TOOLS: CatalogEntry[] = [
   // Reads / discovery
-  { name: 'account.info', make: makeAccountInfo, web: false, blurb: 'account.info — the agent address, network, balance, and active policy.' },
-  { name: 'sui.balance', make: makeSuiBalance, web: false, blurb: 'sui.balance — SUI + coin balances for the agent or any address.' },
-  { name: 'policy.show', make: makePolicyShow, web: false, blurb: 'policy.show — the active fund-control policy (caps, allowlists, expiry).' },
-  { name: 'protocols.list', make: makeProtocolsList, web: true, blurb: 'protocols.list — which protocols Lyra can READ vs EXECUTE on.' },
-  { name: 'defi.yields', make: makeDefiYields, web: true, blurb: 'defi.yields — best yields across Sui (DefiLlama), tagged executable / executeWith.' },
-  { name: 'deepbook.markets', make: makeDeepbookMarkets, web: true, blurb: 'deepbook.markets — DeepBook spot mid prices.' },
-  { name: 'cetus.quote', make: makeCetusQuote, web: false, blurb: 'cetus.quote — best swap route/price across DEXes (read-only aggregator).' },
+  {
+    name: 'account.info',
+    make: makeAccountInfo,
+    web: false,
+    blurb: 'account.info — the agent address, network, balance, and active policy.',
+  },
+  {
+    name: 'sui.balance',
+    make: makeSuiBalance,
+    web: false,
+    blurb: 'sui.balance — SUI + coin balances for the agent or any address.',
+  },
+  {
+    name: 'policy.show',
+    make: makePolicyShow,
+    web: false,
+    blurb: 'policy.show — the active fund-control policy (caps, allowlists, expiry).',
+  },
+  {
+    name: 'protocols.list',
+    make: makeProtocolsList,
+    web: true,
+    blurb: 'protocols.list — which protocols Lyra can READ vs EXECUTE on.',
+  },
+  {
+    name: 'defi.yields',
+    make: makeDefiYields,
+    web: true,
+    blurb: 'defi.yields — best yields across Sui (DefiLlama), tagged executable / executeWith.',
+  },
+  {
+    name: 'deepbook.markets',
+    make: makeDeepbookMarkets,
+    web: true,
+    blurb: 'deepbook.markets — DeepBook spot mid prices.',
+  },
+  {
+    name: 'cetus.quote',
+    make: makeCetusQuote,
+    web: false,
+    blurb: 'cetus.quote — best swap route/price across DEXes (read-only aggregator).',
+  },
   { name: 'scallop.markets', make: makeScallopMarkets, web: true },
   { name: 'scallop.position', make: makeScallopPosition, web: true },
   { name: 'navi.markets', make: makeNaviMarkets, web: true },
   { name: 'navi.position', make: makeNaviPosition, web: true },
   { name: 'suilend.position', make: makeSuilendPosition, web: true },
-  { name: 'walrus.staking', make: makeWalrusStaking, web: true, blurb: "walrus.staking — the agent's WAL balance, StakedWal positions, and nodes to stake with." },
+  {
+    name: 'walrus.staking',
+    make: makeWalrusStaking,
+    web: true,
+    blurb:
+      "walrus.staking — the agent's WAL balance, StakedWal positions, and nodes to stake with.",
+  },
 
   // Policy / transfer / swap
-  { name: 'policy.create', make: makePolicyCreate, web: false, blurb: 'policy.create — publish a shared on-chain AgentPolicy (arms enforcement + receipts).' },
-  { name: 'sui.send', make: makeSuiSend, web: false, blurb: 'sui.send — transfer SUI; blocked if out of policy, mints an on-chain receipt.' },
-  { name: 'swap', make: makeSwap, web: false, blurb: 'swap — best-route swap across the major Sui DEXes (7k aggregator).' },
+  {
+    name: 'policy.create',
+    make: makePolicyCreate,
+    web: false,
+    blurb: 'policy.create — publish a shared on-chain AgentPolicy (arms enforcement + receipts).',
+  },
+  {
+    name: 'sui.send',
+    make: makeSuiSend,
+    web: false,
+    blurb: 'sui.send — transfer SUI; blocked if out of policy, mints an on-chain receipt.',
+  },
+  {
+    name: 'swap',
+    make: makeSwap,
+    web: false,
+    blurb: 'swap — best-route swap across the major Sui DEXes (7k aggregator).',
+  },
 
   // Lending
-  { name: 'scallop.supply', make: makeScallopSupply, web: true, blurb: 'Lending — scallop.supply/withdraw, navi.supply/withdraw/borrow/repay, suilend.supply/withdraw/borrow/repay.' },
+  {
+    name: 'scallop.supply',
+    make: makeScallopSupply,
+    web: true,
+    blurb:
+      'Lending — scallop.supply/withdraw, navi.supply/withdraw/borrow/repay, suilend.supply/withdraw/borrow/repay.',
+  },
   { name: 'scallop.withdraw', make: makeScallopWithdraw, web: true },
   { name: 'navi.supply', make: makeNaviSupply, web: true },
   { name: 'navi.withdraw', make: makeNaviWithdraw, web: true },
@@ -98,15 +160,36 @@ export const TOOLS: CatalogEntry[] = [
   { name: 'suilend.repay', make: makeSuilendRepay, web: true },
 
   // Staking
-  { name: 'sui.stake', make: makeStake, web: true, blurb: 'sui.stake / sui.unstake — native SUI staking to a validator (min 1 SUI).' },
+  {
+    name: 'sui.stake',
+    make: makeStake,
+    web: true,
+    blurb: 'sui.stake / sui.unstake — native SUI staking to a validator (min 1 SUI).',
+  },
   { name: 'sui.unstake', make: makeUnstake, web: true },
-  { name: 'volo.stake', make: makeVoloStake, web: true, blurb: 'volo.stake / volo.unstake — liquid staking, SUI ↔ vSUI.' },
+  {
+    name: 'volo.stake',
+    make: makeVoloStake,
+    web: true,
+    blurb: 'volo.stake / volo.unstake — liquid staking, SUI ↔ vSUI.',
+  },
   { name: 'volo.unstake', make: makeVoloUnstake, web: true },
-  { name: 'walrus.stake', make: makeWalrusStake, web: true, blurb: 'walrus.stake / walrus.unstake — stake WAL to a Walrus storage node (min 1 WAL; unstake returns WAL next epoch).' },
+  {
+    name: 'walrus.stake',
+    make: makeWalrusStake,
+    web: true,
+    blurb:
+      'walrus.stake / walrus.unstake — stake WAL to a Walrus storage node (min 1 WAL; unstake returns WAL next epoch).',
+  },
   { name: 'walrus.unstake', make: makeWalrusUnstake, web: true },
 
   // Storage
-  { name: 'walrus.store', make: makeWalrusStore, web: false, blurb: 'walrus.store — persist a receipt/report/memory artifact to Walrus.' },
+  {
+    name: 'walrus.store',
+    make: makeWalrusStore,
+    web: false,
+    blurb: 'walrus.store — persist a receipt/report/memory artifact to Walrus.',
+  },
 ]
 
 /** Tool names exposed in the browser console's inline-execute set (derived). */

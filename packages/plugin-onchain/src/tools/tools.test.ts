@@ -12,7 +12,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { PluginContext, ToolDef } from 'lyra-core'
-import { capabilitySummary, TOOLS, WEB_TOOL_NAMES } from '../catalog'
+import { TOOLS, WEB_TOOL_NAMES, capabilitySummary } from '../catalog'
 import plugin from '../index'
 import type { OnchainRuntimeContext } from '../types'
 import { makeVoloStake } from './liquid-stake'
