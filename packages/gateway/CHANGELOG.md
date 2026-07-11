@@ -1,5 +1,15 @@
 # lyra-gateway
 
+## 0.2.0
+
+### Patch Changes
+
+- Updated dependencies
+  - lyra-plugin-onchain@0.2.0
+  - lyra-core@0.2.0
+  - lyra-plugin-system@0.2.0
+  - lyra-plugin-telegram@0.2.0
+
 ## 0.1.11
 
 ### Patch Changes
