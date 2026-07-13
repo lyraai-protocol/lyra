@@ -121,3 +121,32 @@ describe('fail', () => {
     expect(() => store.fail('dep-1', 'too late', 1500)).toThrow(/illegal/)
   })
 })
+
+describe('fromRecords (durable-store hydration)', () => {
+  test('seeds full records + preserves status/artifacts + drives them', () => {
+    const seeded = InMemoryDepositStore.fromRecords([
+      {
+        ...SAMPLE,
+        status: 'source_burned',
+        createdMs: 1,
+        updatedMs: 2,
+        burnTxHash: '0xburn',
+      },
+    ])
+    const d = seeded.get('dep-1')
+    expect(d?.status).toBe('source_burned')
+    expect(d?.burnTxHash).toBe('0xburn')
+    // Only non-terminal seeded records show up as active work.
+    expect(seeded.listActive().map(x => x.id)).toEqual(['dep-1'])
+    // The lifecycle still guards seeded records: source_burned → attested is legal.
+    expect(seeded.transition('dep-1', 'attested', {}, 3).status).toBe('attested')
+  })
+
+  test('excludes terminal records from the active work-list', () => {
+    const seeded = InMemoryDepositStore.fromRecords([
+      { ...SAMPLE, id: 'done', status: 'vault_deposited', createdMs: 1, updatedMs: 2 },
+      { ...SAMPLE, id: 'live', status: 'attested', createdMs: 1, updatedMs: 2 },
+    ])
+    expect(seeded.listActive().map(x => x.id)).toEqual(['live'])
+  })
+})

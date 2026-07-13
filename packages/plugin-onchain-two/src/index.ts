@@ -41,6 +41,13 @@ export {
   driveTick,
   reapStale,
 } from './deposit-driver'
+// The durable driver tick: load active → drive one step → persist touched. Bridges
+// the async durable store (the api's /deposits) to the sync spine.
+export {
+  type DurableDepositRepo,
+  type DriveTickResult,
+  driveDurableTick,
+} from './deposit-driver-loop'
 // Entry validation: turn a bridge.deposit request into a validated NewDeposit
 // (supported CCTP chains, token classification → needsSwap, amount/owner checks).
 export {
