@@ -10,10 +10,10 @@
  */
 
 import type { SuiClient } from '@mysten/sui/client'
-import { decimalToBase, normalizeCoinType } from './policy'
+import { normalizeCoinType } from './policy'
 
 // Re-export so tools import both the resolver and the amount parser from one place.
-export { decimalToBase }
+export { decimalToBase } from './policy'
 
 export interface CoinInfo {
   type: string

@@ -94,86 +94,73 @@ export interface PolicyVerdict {
 }
 
 /**
- * Evaluate a proposed Sui action against the policy. Pure + deterministic.
- * `nowMs` defaults to the wall clock but can be passed for deterministic tests.
+ * True when `value` is NOT in a non-empty allowlist (i.e. a violation). An empty
+ * or absent allowlist means "any", so it never violates. Uses a Set for lookup.
  */
+function outsideAllowlist(
+  allowlist: string[] | undefined,
+  value: string,
+  normalize: (s: string) => string,
+): boolean {
+  if (!allowlist?.length) return false
+  return !new Set(allowlist.map(normalize)).has(normalize(value))
+}
+
+/** Keep the message from each `[failed, message]` pair whose condition is true. */
+function collect(checks: ReadonlyArray<readonly [boolean, string]>): string[] {
+  return checks.filter(([failed]) => failed).map(([, message]) => message)
+}
+
 export function evaluatePolicy(
   action: SuiPolicyAction,
   policy: SuiPolicy,
   nowMs: number = Date.now(),
 ): PolicyVerdict {
-  const violations: string[] = []
-  const readOnly = policy.readOnly || policy.autonomy === 'readonly'
-  if (readOnly) violations.push('policy is read-only: all writes are blocked')
-
-  // Coin allowlist — checks the input asset AND, for swaps, the OUTPUT asset,
-  // otherwise the agent could swap an allowed coin INTO an arbitrary one.
-  if (policy.coinAllowlist?.length) {
-    const allowed = policy.coinAllowlist.map(normalizeCoinType)
-    if (!allowed.includes(normalizeCoinType(action.coinType))) {
-      violations.push(`coin ${action.coinType} is not in the coin allowlist`)
-    }
-    if (
+  const readOnly = policy.readOnly === true || policy.autonomy === 'readonly'
+  const expired = policy.expiryMs !== undefined && nowMs > policy.expiryMs
+  const violations = collect([
+    [readOnly, 'policy is read-only: all writes are blocked'],
+    [
+      outsideAllowlist(policy.coinAllowlist, action.coinType, normalizeCoinType),
+      `coin ${action.coinType} is not in the coin allowlist`,
+    ],
+    [
       action.kind === 'swap' &&
-      action.toCoinType !== undefined &&
-      !allowed.includes(normalizeCoinType(action.toCoinType))
-    ) {
-      violations.push(`swap output coin ${action.toCoinType} is not in the coin allowlist`)
-    }
-  }
-
-  // Protocol allowlist.
-  if (policy.protocolAllowlist?.length && action.protocol !== undefined) {
-    const allowed = policy.protocolAllowlist.map(lc)
-    if (!allowed.includes(lc(action.protocol))) {
-      violations.push(`protocol ${action.protocol} is not in the protocol allowlist`)
-    }
-  }
-
-  // Recipient allowlist (transfers).
-  if (policy.recipientAllowlist?.length && action.to) {
-    const allowed = policy.recipientAllowlist.map(lc)
-    if (!allowed.includes(lc(action.to))) {
-      violations.push(`recipient ${action.to} is not in the recipient allowlist`)
-    }
-  }
-
-  // Per-tx amount cap.
-  if (policy.maxMistPerTx !== undefined && action.amountMist > policy.maxMistPerTx) {
-    violations.push(
+        action.toCoinType !== undefined &&
+        outsideAllowlist(policy.coinAllowlist, action.toCoinType, normalizeCoinType),
+      `swap output coin ${action.toCoinType} is not in the coin allowlist`,
+    ],
+    [
+      action.protocol !== undefined &&
+        outsideAllowlist(policy.protocolAllowlist, action.protocol, lc),
+      `protocol ${action.protocol} is not in the protocol allowlist`,
+    ],
+    [
+      action.to !== undefined && outsideAllowlist(policy.recipientAllowlist, action.to, lc),
+      `recipient ${action.to} is not in the recipient allowlist`,
+    ],
+    [
+      policy.maxMistPerTx !== undefined && action.amountMist > policy.maxMistPerTx,
       `amount ${action.amountMist} MIST exceeds per-tx cap ${policy.maxMistPerTx} MIST`,
-    )
-  }
-
-  // Slippage cap (swaps).
-  if (
-    action.slippageBps !== undefined &&
-    policy.maxSlippageBps !== undefined &&
-    action.slippageBps > policy.maxSlippageBps
-  ) {
-    violations.push(`slippage ${action.slippageBps} bps exceeds max ${policy.maxSlippageBps} bps`)
-  }
-
-  // Expiry.
-  if (policy.expiryMs !== undefined && nowMs > policy.expiryMs) {
-    violations.push(`policy expired at ${new Date(policy.expiryMs).toISOString()}`)
-  }
+    ],
+    [
+      action.slippageBps !== undefined &&
+        policy.maxSlippageBps !== undefined &&
+        action.slippageBps > policy.maxSlippageBps,
+      `slippage ${action.slippageBps} bps exceeds max ${policy.maxSlippageBps} bps`,
+    ],
+    [
+      expired,
+      `policy expired at ${policy.expiryMs ? new Date(policy.expiryMs).toISOString() : ''}`,
+    ],
+  ])
 
   const allowed = violations.length === 0
-
-  // Approval gate: 'confirm' tier always needs approval; 'auto' escalates only
-  // when the spend is above the auto ceiling (material risk).
-  let requiresApproval = false
-  if (allowed) {
-    if (policy.autonomy === 'confirm') {
-      requiresApproval = true
-    } else if (
-      policy.autoMaxMistPerTx !== undefined &&
-      action.amountMist > policy.autoMaxMistPerTx
-    ) {
-      requiresApproval = true
-    }
-  }
+  // Approval gate: 'confirm' always needs approval; 'auto' escalates only above the
+  // auto ceiling (material risk).
+  const overAutoCeiling =
+    policy.autoMaxMistPerTx !== undefined && action.amountMist > policy.autoMaxMistPerTx
+  const requiresApproval = allowed && (policy.autonomy === 'confirm' || overAutoCeiling)
 
   return { violations, allowed, requiresApproval }
 }
@@ -222,60 +209,40 @@ const list = (s?: string): string[] | undefined =>
  *   LYRA_POLICY_RECIPIENT_ALLOWLIST=0xabc...,0xdef...
  *   LYRA_POLICY_EXPIRY_MINUTES=60
  */
+/** Parse a numeric env value, keeping it only when finite and `ok(n)`. */
+function envNum(s: string | undefined, ok: (n: number) => boolean): number | undefined {
+  if (!s) return undefined
+  const n = Number(s)
+  return Number.isFinite(n) && ok(n) ? n : undefined
+}
+
+/** `{ key: value }` when `value` is defined, else `{}` — for building a policy by spread. */
+function field<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> {
+  return value === undefined ? {} : ({ [key]: value } as Record<K, V>)
+}
+
 export function policyFromEnv(
   env: Record<string, string | undefined> = process.env,
   nowMs: number = Date.now(),
 ): SuiPolicy | undefined {
-  const policy: SuiPolicy = {}
-  let any = false
-
-  if (env.LYRA_POLICY_READONLY === '1') {
-    policy.readOnly = true
-    any = true
-  }
-  const maxPerTx = suiToMist(env.LYRA_POLICY_MAX_PER_TX_SUI)
-  if (maxPerTx !== undefined) {
-    policy.maxMistPerTx = maxPerTx
-    any = true
-  }
-  const autoMax = suiToMist(env.LYRA_POLICY_AUTO_MAX_SUI)
-  if (autoMax !== undefined) {
-    policy.autoMaxMistPerTx = autoMax
-    any = true
-  }
-  if (env.LYRA_POLICY_MAX_SLIPPAGE_BPS) {
-    const bps = Number(env.LYRA_POLICY_MAX_SLIPPAGE_BPS)
-    if (Number.isFinite(bps) && bps >= 0) {
-      policy.maxSlippageBps = bps
-      any = true
-    }
-  }
   const autonomy = env.LYRA_POLICY_AUTONOMY
-  if (autonomy === 'auto' || autonomy === 'confirm' || autonomy === 'readonly') {
-    policy.autonomy = autonomy
-    any = true
+  const slippage = envNum(env.LYRA_POLICY_MAX_SLIPPAGE_BPS, n => n >= 0)
+  const expiryMins = envNum(env.LYRA_POLICY_EXPIRY_MINUTES, n => n > 0)
+  const policy: SuiPolicy = {
+    ...field('readOnly', env.LYRA_POLICY_READONLY === '1' ? true : undefined),
+    ...field('maxMistPerTx', suiToMist(env.LYRA_POLICY_MAX_PER_TX_SUI)),
+    ...field('autoMaxMistPerTx', suiToMist(env.LYRA_POLICY_AUTO_MAX_SUI)),
+    ...field('maxSlippageBps', slippage),
+    ...field(
+      'autonomy',
+      autonomy === 'auto' || autonomy === 'confirm' || autonomy === 'readonly'
+        ? autonomy
+        : undefined,
+    ),
+    ...field('protocolAllowlist', list(env.LYRA_POLICY_ALLOWED_PROTOCOLS)),
+    ...field('coinAllowlist', list(env.LYRA_POLICY_ALLOWED_COINS)),
+    ...field('recipientAllowlist', list(env.LYRA_POLICY_RECIPIENT_ALLOWLIST)),
+    ...field('expiryMs', expiryMins === undefined ? undefined : nowMs + expiryMins * 60_000),
   }
-  const protocols = list(env.LYRA_POLICY_ALLOWED_PROTOCOLS)
-  if (protocols) {
-    policy.protocolAllowlist = protocols
-    any = true
-  }
-  const coins = list(env.LYRA_POLICY_ALLOWED_COINS)
-  if (coins) {
-    policy.coinAllowlist = coins
-    any = true
-  }
-  const recipients = list(env.LYRA_POLICY_RECIPIENT_ALLOWLIST)
-  if (recipients) {
-    policy.recipientAllowlist = recipients
-    any = true
-  }
-  if (env.LYRA_POLICY_EXPIRY_MINUTES) {
-    const mins = Number(env.LYRA_POLICY_EXPIRY_MINUTES)
-    if (Number.isFinite(mins) && mins > 0) {
-      policy.expiryMs = nowMs + mins * 60_000
-      any = true
-    }
-  }
-  return any ? policy : undefined
+  return Object.keys(policy).length > 0 ? policy : undefined
 }

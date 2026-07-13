@@ -44,6 +44,32 @@ interface ResolvedRoute {
   quote: (tr: unknown, params: unknown) => Promise<RouteQuote>
 }
 
+/** Resolve + validate + quote the best CCTP route USDC(source) → USDC(Sui). Throws on any failure. */
+async function quoteCctpToSui(
+  from: (typeof SOURCE_CHAINS)[number],
+  amt: string,
+): Promise<RouteQuote> {
+  const srcAddr = circle.usdcContract.get('Mainnet', from)
+  const dstAddr = circle.usdcContract.get('Mainnet', 'Sui')
+  if (!srcAddr) throw new Error(`no native USDC on ${from}`)
+  if (!dstAddr) throw new Error('no native USDC on Sui')
+
+  const wh = await wormhole('Mainnet', [evm, sui])
+  const tr = await routes.RouteTransferRequest.create(wh, {
+    source: Wormhole.tokenId(from, srcAddr),
+    destination: Wormhole.tokenId('Sui', dstAddr),
+  })
+  const found = await wh.resolver([routes.AutomaticCCTPRoute, routes.CCTPRoute]).findRoutes(tr)
+  const route = found[0] as unknown as ResolvedRoute | undefined
+  if (!route) throw new Error(`no CCTP route from ${from} to Sui`)
+
+  const validated = await route.validate(tr, { amount: amt, options: route.getDefaultOptions?.() })
+  if (!validated.valid) throw new Error(`route invalid: ${validated.error?.message ?? 'unknown'}`)
+  const quote = await route.quote(tr, validated.params)
+  if (!quote.success) throw new Error(`quote failed: ${quote.error?.message ?? 'unknown'}`)
+  return quote
+}
+
 export function makeBridgeRoutes(): ToolDef<Args> {
   return {
     name: 'bridge.routes',
@@ -53,32 +79,7 @@ export function makeBridgeRoutes(): ToolDef<Args> {
     schema: Schema,
     handler: async (args): Promise<{ ok: boolean; data?: unknown; error?: string }> => {
       try {
-        const srcAddr = circle.usdcContract.get('Mainnet', args.from)
-        const dstAddr = circle.usdcContract.get('Mainnet', 'Sui')
-        if (!srcAddr) return { ok: false, error: `no native USDC on ${args.from}` }
-        if (!dstAddr) return { ok: false, error: 'no native USDC on Sui' }
-
-        const wh = await wormhole('Mainnet', [evm, sui])
-        const source = Wormhole.tokenId(args.from, srcAddr)
-        const destination = Wormhole.tokenId('Sui', dstAddr)
-        const tr = await routes.RouteTransferRequest.create(wh, { source, destination })
-
-        const resolver = wh.resolver([routes.AutomaticCCTPRoute, routes.CCTPRoute])
-        const found = await resolver.findRoutes(tr)
-        if (!found.length) return { ok: false, error: `no CCTP route from ${args.from} to Sui` }
-
-        const route = found[0] as unknown as ResolvedRoute
-        const validated = await route.validate(tr, {
-          amount: args.amount,
-          options: route.getDefaultOptions?.(),
-        })
-        if (!validated.valid) {
-          return { ok: false, error: `route invalid: ${validated.error?.message ?? 'unknown'}` }
-        }
-        const quote = await route.quote(tr, validated.params)
-        if (!quote.success) {
-          return { ok: false, error: `quote failed: ${quote.error?.message ?? 'unknown'}` }
-        }
+        const quote = await quoteCctpToSui(args.from, args.amount)
         const recv = quote.destinationToken?.amount
         return {
           ok: true,
