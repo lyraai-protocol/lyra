@@ -59,7 +59,7 @@ export async function resolveVaultForAgent(
     if (f?.agent !== agentAddress) continue
     const policyId = f.policy_id as string | undefined
     const owner = f.owner as string | undefined
-    if (!policyId || !owner) continue
+    if (!(policyId && owner)) continue
     const pol = await client
       .getObject({ id: policyId, options: { showContent: true } })
       .catch(() => null)

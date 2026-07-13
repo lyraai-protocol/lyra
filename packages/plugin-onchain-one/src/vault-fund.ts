@@ -116,7 +116,7 @@ export function returnSuiToVault(
   ctx: OnchainRuntimeContext,
   coin: TransactionObjectArgument,
 ): boolean {
-  if (!ctx.vaultId || !ctx.packageId) return false
+  if (!(ctx.vaultId && ctx.packageId)) return false
   tx.moveCall({
     target: `${ctx.packageId}::vault::deposit`,
     typeArguments: [SUI_TYPE],
