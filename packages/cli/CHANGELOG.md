@@ -1,5 +1,16 @@
 # lyra-ai-agent
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies
+  - lyra-plugin-onchain@0.4.1
+  - lyra-core@0.4.1
+  - lyra-gateway@0.4.1
+  - lyra-plugin-system@0.4.1
+  - lyra-plugin-telegram@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes
