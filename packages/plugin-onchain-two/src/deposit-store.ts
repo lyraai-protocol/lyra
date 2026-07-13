@@ -65,6 +65,19 @@ export interface DepositStore {
 export class InMemoryDepositStore implements DepositStore {
   private readonly byId = new Map<string, PendingDeposit>()
 
+  /**
+   * Seed a store from existing FULL records (e.g. an active-work batch loaded from a
+   * durable store). The bridge driver hydrates one tick's work-list this way, drives
+   * it through the sync spine, then persists the mutated records back to the durable
+   * store — bridging the async durable layer to the sync {@link DepositStore} the
+   * driver expects, without re-running the lifecycle from scratch.
+   */
+  static fromRecords(records: PendingDeposit[]): InMemoryDepositStore {
+    const store = new InMemoryDepositStore()
+    for (const r of records) store.byId.set(r.id, { ...r })
+    return store
+  }
+
   create(input: NewDeposit, now = Date.now()): PendingDeposit {
     if (this.byId.has(input.id)) throw new Error(`deposit ${input.id} already exists`)
     const deposit: PendingDeposit = {
