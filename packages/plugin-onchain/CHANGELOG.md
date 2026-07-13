@@ -1,5 +1,17 @@
 # lyra-plugin-onchain
 
+## 0.4.1
+
+### Patch Changes
+
+- Fix the broken `lyra-plugin-onchain@0.4.0` publish. The facade hard-depended on the
+  private, unpublished `lyra-plugin-onchain-two`, so its deps published as `workspace:*`
+  and every downstream install (CLI, gateway) failed to resolve. Drop the v2 dependency:
+  the facade is now a v1-only pass-through of `lyra-plugin-onchain-one` (the v2 Wormhole
+  bridge — which pins @mysten/sui v2 and can't be flattened onto npm alongside v1 — is
+  deferred until it ships with proper nested-node_modules coexistence).
+  - lyra-core@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
