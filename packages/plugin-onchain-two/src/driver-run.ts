@@ -39,7 +39,7 @@ const POLL_MS = Number(process.env.POLL_MS ?? 30_000)
 const MAX_AGE_MS = Number(process.env.MAX_AGE_MS ?? 3_600_000)
 
 function key(owner: string, id: string): string {
-  return `${owner.toLowerCase().replace(/[^a-z0-9x]/g, '')}/${encodeURIComponent(id)}`
+  return `${owner.toLowerCase().replace(/[^a-z0-9]/g, '')}/${encodeURIComponent(id)}`
 }
 
 // Durable store over the api service's /deposits routes (the same token the console
