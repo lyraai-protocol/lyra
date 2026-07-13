@@ -27,6 +27,14 @@ export {
   type DepositStore,
   InMemoryDepositStore,
 } from './deposit-store'
+// The runtime that advances deposits one step per tick via injected chain executors
+// (fully testable with mocks; real CCTP/Sui executors plug in behind the interface).
+export {
+  type DepositExecutors,
+  driveOnce,
+  driveTick,
+  reapStale,
+} from './deposit-driver'
 
 const plugin: NativePlugin = {
   name: 'onchain-two',
