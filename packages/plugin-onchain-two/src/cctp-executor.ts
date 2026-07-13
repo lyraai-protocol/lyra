@@ -16,9 +16,11 @@
  *  - run this under Node, NOT Bun (Bun mis-resolves `@noble/hashes/crypto` on the
  *    Sui-signer path). The bridge poller is a Node process, separate from the gateway.
  *
- * Still required to go live (do NOT claim these verified until tested): a provisioned
- * `Vault<USDC>` for `depositToVault`, a v2 swap route for the long-tail `swapToUsdc`
- * leg, and another end-to-end run THROUGH this spine (not just the raw SDK).
+ * The Sui-native legs (swap, vault deposit) are DELEGATED to caller-provided functions
+ * so the v1 vault contract + signer stay out of this v2 package. The deposit PTB
+ * (`vault::deposit_entry<USDC>`) is verified on testnet: 1 CCTP-redeemed USDC deposited
+ * into a `Vault<USDC>`. Still required to go live: an app flow that provisions the
+ * owner's `Vault<USDC>` + wires `depositToVault`, and one run THROUGH this spine.
  */
 
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
@@ -36,6 +38,18 @@ export interface CctpExecutorConfig {
   suiRelayerKey: string
   /** How long each attestation poll waits before yielding back to the driver (ms). */
   attestationPollMs?: number
+  /**
+   * Deposit the redeemed USDC into the owner's `Vault<USDC>`. Delegated to the caller
+   * so the v1 vault contract + signer stay in the v1 plugin (this package pins
+   * @mysten/sui v2 for the Wormhole SDK). Verified on testnet:
+   * `vault::deposit_entry<USDC>(vault, coin)`.
+   */
+  depositToVault: (deposit: PendingDeposit) => Promise<{ vaultDepositDigest: string }>
+  /**
+   * Swap a redeemed long-tail asset to USDC on Sui before the vault. Delegated (v1
+   * swap). Omit if you only support native-USDC (CCTP) deposits.
+   */
+  swapToUsdc?: (deposit: PendingDeposit) => Promise<{ suiSwapDigest: string }>
 }
 
 /** Build the real CCTP executor. `deposit` handlers reconstruct the transfer from the
@@ -86,17 +100,15 @@ export function makeCctpExecutor(cfg: CctpExecutorConfig): DepositExecutors {
       return { suiRedeemDigest: String(dstTxs[dstTxs.length - 1] ?? dstTxs[0]) }
     },
 
-    async swapToUsdc(_d): Promise<{ suiSwapDigest: string }> {
-      // Long-tail source assets arrive as a wrapped coin and must be swapped to USDC
-      // on Sui before the vault. Requires a v2 swap route — not wired yet.
-      throw new Error('swapToUsdc not implemented — long-tail deposits pending a v2 swap route')
+    swapToUsdc(d): Promise<{ suiSwapDigest: string }> {
+      if (!cfg.swapToUsdc) {
+        return Promise.reject(new Error('swapToUsdc not configured — native-USDC deposits only'))
+      }
+      return cfg.swapToUsdc(d)
     },
 
-    async depositToVault(_d): Promise<{ vaultDepositDigest: string }> {
-      // Deposit the minted USDC into the owner's Vault<USDC> via lyra::vault::deposit.
-      // Requires a provisioned Vault<USDC> for the owner (app currently provisions
-      // Vault<SUI> only) — wired once USDC-vault provisioning lands.
-      throw new Error('depositToVault not implemented — needs a provisioned Vault<USDC>')
+    depositToVault(d): Promise<{ vaultDepositDigest: string }> {
+      return cfg.depositToVault(d)
     },
   }
 }
