@@ -6,12 +6,20 @@
  * lyra-plugin-onchain-one. Tools register here and build their own PTBs with the
  * v2 client/keypair; the version-agnostic ToolDef interface is the only boundary.
  */
-import type { NativePlugin } from 'lyra-core'
+import type { NativePlugin, ToolDef } from 'lyra-core'
+import { makeBridgeRoutes } from './bridge'
 
-// v2 tools register here (Wormhole bridge next). Empty until the first v2 tool lands.
+export { makeBridgeRoutes } from './bridge'
+export { makeV2Context, type V2Context } from './context'
+
 const plugin: NativePlugin = {
   name: 'onchain-two',
-  register: () => {},
+  register: ctx => {
+    const c = ctx as unknown as { registerTool?: (t: ToolDef) => void }
+    // Read-only quote tool needs no v2 signer context. Execute tools (bridge
+    // deposit/withdraw) will build a v2 context from the shared secret when added.
+    c.registerTool?.(makeBridgeRoutes() as ToolDef)
+  },
 }
 
 export default plugin

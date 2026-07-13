@@ -1,0 +1,90 @@
+/**
+ * bridge.routes — quote CCTP routes to bring **native USDC** from an EVM/SVM chain
+ * into the Sui vault. Read-only: returns fee, ETA, and estimated USDC received.
+ *
+ * Uses the @mysten/sui v2 Wormhole SDK (isolated in this package). Execution
+ * (source-chain burn → attestation → Sui redeem + vault::deposit) is a follow-up;
+ * see DESIGN.md. The source-chain burn is always signed by the USER's own wallet.
+ */
+import { Wormhole, amount, routes, wormhole } from '@wormhole-foundation/sdk'
+import { circle } from '@wormhole-foundation/sdk-base'
+import evm from '@wormhole-foundation/sdk/evm'
+import solana from '@wormhole-foundation/sdk/solana'
+import sui from '@wormhole-foundation/sdk/sui'
+import type { ToolDef } from 'lyra-core'
+import { z } from 'zod'
+
+const SOURCE_CHAINS = [
+  'Ethereum',
+  'Base',
+  'Arbitrum',
+  'Optimism',
+  'Polygon',
+  'Avalanche',
+  'Solana',
+] as const
+
+const Schema = z.object({
+  from: z.enum(SOURCE_CHAINS).describe('Source chain to bridge native USDC from.'),
+  amount: z.string().min(1).describe('USDC amount to bridge, e.g. "10".'),
+})
+type Args = z.infer<typeof Schema>
+
+// The SDK's route/quote objects carry deep generics; we read a few fields loosely.
+// biome-ignore lint/suspicious/noExplicitAny: SDK generic surface
+type Loose = any
+
+export function makeBridgeRoutes(): ToolDef<Args> {
+  return {
+    name: 'bridge.routes',
+    description:
+      'Quote CCTP routes to bridge native USDC from an EVM/SVM chain into the Sui vault. Read-only: fee, ETA, estimated USDC received. Does not execute (the user signs the source-chain burn).',
+    searchHint: 'bridge cross-chain cctp usdc deposit evm solana sui quote route fee',
+    schema: Schema,
+    handler: async (args): Promise<{ ok: boolean; data?: unknown; error?: string }> => {
+      try {
+        const srcAddr = circle.usdcContract.get('Mainnet', args.from)
+        const dstAddr = circle.usdcContract.get('Mainnet', 'Sui')
+        if (!srcAddr) return { ok: false, error: `no native USDC on ${args.from}` }
+        if (!dstAddr) return { ok: false, error: 'no native USDC on Sui' }
+
+        const wh = await wormhole('Mainnet', [evm, sui, solana])
+        const source = Wormhole.tokenId(args.from, srcAddr)
+        const destination = Wormhole.tokenId('Sui', dstAddr)
+        const tr = await routes.RouteTransferRequest.create(wh, { source, destination })
+
+        const resolver = wh.resolver([routes.AutomaticCCTPRoute, routes.CCTPRoute])
+        const found = await resolver.findRoutes(tr)
+        if (!found.length) return { ok: false, error: `no CCTP route from ${args.from} to Sui` }
+
+        const route = found[0] as Loose
+        const validated = await route.validate(tr, {
+          amount: args.amount,
+          options: route.getDefaultOptions?.(),
+        })
+        if (!validated.valid) {
+          return { ok: false, error: `route invalid: ${validated.error?.message ?? 'unknown'}` }
+        }
+        const quote = (await route.quote(tr, validated.params)) as Loose
+        if (!quote.success) {
+          return { ok: false, error: `quote failed: ${quote.error?.message ?? 'unknown'}` }
+        }
+        const recv = quote.destinationToken?.amount
+        return {
+          ok: true,
+          data: {
+            from: args.from,
+            to: 'Sui',
+            amountIn: `${args.amount} USDC`,
+            estReceived: recv ? `${amount.display(recv)} USDC` : 'see quote',
+            route: (route.constructor as Loose)?.meta?.name ?? 'CCTP',
+            etaMs: quote.eta ?? null,
+            note: 'native USDC via CCTP — user signs the burn on the source chain',
+          },
+        }
+      } catch (e) {
+        return { ok: false, error: (e as Error).message.slice(0, 240) }
+      }
+    },
+  }
+}
