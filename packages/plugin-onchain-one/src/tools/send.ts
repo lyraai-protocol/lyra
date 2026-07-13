@@ -11,13 +11,67 @@
 import { Transaction } from '@mysten/sui/transactions'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { simulateAndExecute } from '../execute'
 import { checkMinimum } from '../minimums'
-import { evaluatePolicy, suiToMist } from '../policy'
-import { simulate } from '../simulate'
+import { policyBlock, suiToMist } from '../policy'
 import type { OnchainRuntimeContext } from '../types'
 import { canFundFromVault } from '../vault-fund'
 
 const SUI_TYPE = '0x2::sui::SUI'
+
+const enc = (tx: Transaction, s: string) =>
+  tx.pure.vector('u8', Array.from(new TextEncoder().encode(s)))
+
+/**
+ * Build the transfer PTB: `vault_transfer` (recipient-allowlist enforced on-chain)
+ * when vault-backed, else a gas-coin split + optional `record_action` audit entry.
+ * Returns the tx + whether it records on-chain.
+ */
+function buildSendTx(
+  ctx: OnchainRuntimeContext,
+  to: string,
+  amountMist: bigint,
+): { tx: Transaction; recordsOnChain: boolean } {
+  const tx = new Transaction()
+  const vaultBacked = canFundFromVault(ctx, amountMist)
+  if (vaultBacked) {
+    // Draw from the treasury via the full policy gate AND enforce the recipient
+    // allowlist ON-CHAIN — a prompt-injected agent can't pay an un-allowlisted
+    // address even within budget. The ActionReceipt is routed to the owner.
+    tx.moveCall({
+      target: `${ctx.packageId}::vault::vault_transfer`,
+      typeArguments: [SUI_TYPE],
+      arguments: [
+        tx.object(ctx.vaultId as string),
+        tx.object(ctx.policyObjectId as string),
+        tx.pure.u64(amountMist),
+        tx.pure.address(to),
+        enc(tx, 'send transfer'),
+        tx.object.clock(),
+      ],
+    })
+  } else {
+    // Single-key mode (no vault): split from the agent's coin + transfer, plus an
+    // on-chain receipt when a policy object is configured.
+    const [coin] = tx.splitCoins(tx.gas, [amountMist])
+    tx.transferObjects([coin], to)
+    if (ctx.packageId && ctx.policyObjectId) {
+      tx.moveCall({
+        target: `${ctx.packageId}::policy::record_action`,
+        typeArguments: [SUI_TYPE],
+        arguments: [
+          tx.object(ctx.policyObjectId),
+          tx.pure.u64(amountMist),
+          tx.pure.address('0x0'),
+          enc(tx, 'transfer'),
+          enc(tx, `to ${to}`),
+          tx.object.clock(),
+        ],
+      })
+    }
+  }
+  return { tx, recordsOnChain: vaultBacked || Boolean(ctx.packageId && ctx.policyObjectId) }
+}
 
 const Schema = z.object({
   to: z.string().min(3).describe('Recipient Sui address (0x...).'),
@@ -46,97 +100,37 @@ export function makeSuiSend(ctx: OnchainRuntimeContext): ToolDef<Args> {
         if (tooSmall) return { ok: false, error: tooSmall }
 
         // 1. Policy gate (deterministic) — block before simulate/execute.
-        if (ctx.policy) {
-          const verdict = evaluatePolicy(
-            { kind: 'transfer', coinType: SUI_TYPE, amountMist, to, protocol: 'transfer' },
-            ctx.policy,
-          )
-          if (!verdict.allowed) {
-            return { ok: false, error: `policy blocked: ${verdict.violations.join('; ')}` }
-          }
-        }
-
-        // 2. Build the PTB.
-        const tx = new Transaction()
-        const vaultBacked = canFundFromVault(ctx, amountMist)
-        if (vaultBacked) {
-          // Vault-backed transfer: draw from the treasury via the full policy gate
-          // AND enforce the recipient allowlist ON-CHAIN (vault_transfer sends the
-          // funds to `to` and routes the ActionReceipt to the owner). A prompt-
-          // injected agent can't pay an un-allowlisted address even within budget.
-          tx.moveCall({
-            target: `${ctx.packageId}::vault::vault_transfer`,
-            typeArguments: [SUI_TYPE],
-            arguments: [
-              tx.object(ctx.vaultId as string),
-              tx.object(ctx.policyObjectId as string),
-              tx.pure.u64(amountMist),
-              tx.pure.address(to),
-              tx.pure.vector('u8', Array.from(new TextEncoder().encode('send transfer'))),
-              tx.object.clock(),
-            ],
-          })
-        } else {
-          // Single-key mode (no vault wired): split from the agent's coin + transfer,
-          // plus an on-chain receipt when a policy object is configured.
-          const [coin] = tx.splitCoins(tx.gas, [amountMist])
-          tx.transferObjects([coin], to)
-          if (ctx.packageId && ctx.policyObjectId) {
-            tx.moveCall({
-              target: `${ctx.packageId}::policy::record_action`,
-              typeArguments: [SUI_TYPE],
-              arguments: [
-                tx.object(ctx.policyObjectId as string),
-                tx.pure.u64(amountMist),
-                tx.pure.address('0x0'),
-                tx.pure.vector('u8', Array.from(new TextEncoder().encode('transfer'))),
-                tx.pure.vector('u8', Array.from(new TextEncoder().encode(`to ${to}`))),
-                tx.object.clock(),
-              ],
-            })
-          }
-        }
-
-        // Both paths enforce on-chain when configured: vault_transfer always mints
-        // a receipt; the gas path records only when a policy object is set.
-        const recordsOnChain = vaultBacked || Boolean(ctx.packageId && ctx.policyObjectId)
-
-        // 3. Simulate-before-write.
-        const sim = await simulate(ctx.client, tx, ctx.agentAddress)
-        if (!sim.ok) {
-          return { ok: false, error: `pre-flight simulation failed: ${sim.reason}` }
-        }
-
-        // 4. Execute.
-        const res = await ctx.client.signAndExecuteTransaction({
-          signer: ctx.keypair,
-          transaction: tx,
-          options: { showEffects: true, showObjectChanges: true },
+        const blocked = policyBlock(ctx.policy, {
+          kind: 'transfer',
+          coinType: SUI_TYPE,
+          amountMist,
+          to,
+          protocol: 'transfer',
         })
-        if (res.effects?.status?.status !== 'success') {
-          return {
-            ok: false,
-            error: `execution failed: ${res.effects?.status?.error ?? 'unknown'}`,
-          }
-        }
-        // Settle/index before returning so a follow-up balance read is accurate.
-        await ctx.client.waitForTransaction({ digest: res.digest })
-        const receipt = res.objectChanges?.find(
+        if (blocked) return { ok: false, error: blocked }
+
+        // 2. Build the PTB (vault_transfer when vault-backed, else gas-coin split).
+        const { tx, recordsOnChain } = buildSendTx(ctx, to, amountMist)
+
+        // 3. Simulate-before-write, then execute + wait (shared helper).
+        const exec = await simulateAndExecute(ctx, tx, { showObjectChanges: true })
+        if (!exec.ok) return exec
+        const receipt = exec.value.objectChanges?.find(
           c =>
-            c.type === 'created' &&
+            (c as { type?: string }).type === 'created' &&
             String((c as { objectType?: string }).objectType).endsWith('::receipt::ActionReceipt'),
         ) as { objectId?: string } | undefined
 
         return {
           ok: true,
           data: {
-            digest: res.digest,
+            digest: exec.value.digest,
             recipient: to,
             amountSui: args.amount,
             amountMist: amountMist.toString(),
             status: 'success',
             // Decision receipt: proof this write was policy-checked + simulated.
-            simGasUsed: sim.gasUsed,
+            simGasUsed: exec.value.gasUsed,
             policyEnforced: ctx.policy != null,
             onchainReceipt: recordsOnChain,
             receiptId: receipt?.objectId ?? null,
