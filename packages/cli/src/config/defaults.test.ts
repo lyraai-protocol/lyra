@@ -21,7 +21,7 @@ import {
 describe('config defaults (zero-env-var)', () => {
   test('exported constant values match the shared contract', () => {
     expect(DEFAULT_PACKAGE_ID).toBe(
-      '0x8b2412e9a5d931cafa533d29daf8c91edacda28d6a689cbdecacf2a092380e14',
+      '0xcd6943c0c4397f9d56c908f6e6952056bf469aa062afc7be9af358aba8fe15c5',
     )
     expect(DEFAULT_NETWORK).toBe('mainnet')
     expect(DEFAULT_LLM_BASE_URL).toBe('https://api.openai.com/v1')
