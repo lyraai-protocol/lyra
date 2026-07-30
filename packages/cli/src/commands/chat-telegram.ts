@@ -27,7 +27,7 @@ import type {
   PermissionRequest,
   PermissionService,
 } from 'lyra-core'
-import { applyPerms, applyYolo, newEventId } from 'lyra-core'
+import { applyPerms, applyYolo, errMsg, newEventId } from 'lyra-core'
 import {
   ActiveSessionTracker,
   type ApprovalChoice,
@@ -160,7 +160,7 @@ export function buildTelegramDispatch(deps: BuildDispatchDeps): TelegramDispatch
           item.resolve(r)
         } catch (err) {
           item.resolve({
-            response: `error processing your message: ${(err as Error).message.slice(0, 200)}`,
+            response: `error processing your message: ${errMsg(err, 200)}`,
           })
         }
       }

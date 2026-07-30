@@ -1,5 +1,12 @@
 import { existsSync, statSync } from 'node:fs'
-import { agentPaths, formatSui, getSuiBalanceMist, makeSuiClient, suiRpcUrl } from 'lyra-core'
+import {
+  agentPaths,
+  errMsg,
+  formatSui,
+  getSuiBalanceMist,
+  makeSuiClient,
+  suiRpcUrl,
+} from 'lyra-core'
 import { type SuiPolicy, policyFromEnv } from 'lyra-plugin-onchain'
 import { resolvePackageId, resolvePolicyEnv } from '../config/defaults'
 import { findAndLoadConfig } from '../config/load'
@@ -44,7 +51,7 @@ export async function runStatus(opts?: { cwd?: string }): Promise<void> {
       const mist = await getSuiBalanceMist(client, agent.address)
       console.log(`balance   ${formatSui(mist)} SUI`)
     } catch (e) {
-      console.log(`balance   (rpc error: ${(e as Error).message.slice(0, 80)})`)
+      console.log(`balance   (rpc error: ${errMsg(e, 80)})`)
     }
   }
 

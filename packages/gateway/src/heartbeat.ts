@@ -1,3 +1,5 @@
+import { errMsg } from 'lyra-core'
+
 export interface StartHeartbeatOpts {
   /**
    * Heartbeat target URL. Falls back to `process.env.SANDBOX_PUBLIC_URL` when
@@ -72,7 +74,7 @@ export function startHeartbeat(opts: StartHeartbeatOpts): Heartbeat {
       }
     } catch (e) {
       fail += 1
-      logger(`heartbeat error=${(e as Error).message.slice(0, 120)} fail=${fail}`)
+      logger(`heartbeat error=${errMsg(e, 120)} fail=${fail}`)
     }
   }
 

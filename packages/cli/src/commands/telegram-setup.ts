@@ -1,4 +1,5 @@
 import { cancel, intro, isCancel, note, outro, password, spinner, text } from '@clack/prompts'
+import { errMsg } from 'lyra-core'
 import { findAndLoadConfig } from '../config/load'
 import { writeConfigTs } from '../config/render'
 import { setDotenvVar } from '../util/dotenv'
@@ -35,7 +36,7 @@ export async function runTelegramSetup(): Promise<void> {
     info = await fetchBotInfo(String(token))
     sPing.stop(`bot ok: @${info.username} (id ${info.id})`)
   } catch (e) {
-    sPing.stop(`getMe failed: ${(e as Error).message.slice(0, 200)}`)
+    sPing.stop(`getMe failed: ${errMsg(e, 200)}`)
     cancel('Token rejected.')
     return
   }

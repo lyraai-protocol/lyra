@@ -2,6 +2,7 @@
 export const VERSION = '0.0.0'
 
 export * from './config'
+export { errMsg } from './errors'
 export { formatSui } from './format'
 export { agentPaths, placeholderAgentId } from './paths'
 

@@ -1,4 +1,5 @@
 import { cancel, intro, log, outro, spinner } from '@clack/prompts'
+import { errMsg } from 'lyra-core'
 import { findAndLoadConfig } from '../config/load'
 import { fetchBotInfo, telegramSecretsFromEnv } from '../util/telegram-secrets'
 
@@ -30,7 +31,7 @@ export async function runTelegramStatus(): Promise<void> {
     const info = await fetchBotInfo(secrets.botToken)
     sPing.stop(`bot ok: @${info.username} (id ${info.id})`)
   } catch (e) {
-    sPing.stop(`getMe failed: ${(e as Error).message.slice(0, 200)}`)
+    sPing.stop(`getMe failed: ${errMsg(e, 200)}`)
     log.warn('Token may have been revoked at @BotFather. Re-run `lyra telegram setup`.')
     return
   }
