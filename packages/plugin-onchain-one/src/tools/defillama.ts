@@ -8,6 +8,7 @@
 
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import { adapterForProject } from '../protocols'
 import type { OnchainRuntimeContext } from '../types'
 
@@ -82,7 +83,7 @@ export function makeDefiYields(_ctx: OnchainRuntimeContext): ToolDef<Args> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

@@ -4,6 +4,7 @@
 
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import type { OnchainRuntimeContext } from '../types'
 
 const SUI_TYPE = '0x2::sui::SUI'
@@ -42,7 +43,7 @@ export function makeSuiBalance(ctx: OnchainRuntimeContext): ToolDef<BalanceArgs>
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -74,7 +75,7 @@ export function makeAccountInfo(ctx: OnchainRuntimeContext): ToolDef<InfoArgs> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

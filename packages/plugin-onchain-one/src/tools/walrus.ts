@@ -10,6 +10,7 @@
 import { WalrusClient } from '@mysten/walrus'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import type { OnchainRuntimeContext } from '../types'
 
 const Schema = z.object({
@@ -68,7 +69,7 @@ export function makeWalrusStore(ctx: OnchainRuntimeContext): ToolDef<Args> {
       } catch (e) {
         return {
           ok: false,
-          error: `walrus store failed (needs WAL for storage): ${(e as Error).message.slice(0, 200)}`,
+          error: `walrus store failed (needs WAL for storage): ${errMsg(e, 200)}`,
         }
       }
     },

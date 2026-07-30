@@ -14,6 +14,7 @@ import { AggregatorClient } from '@cetusprotocol/aggregator-sdk'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
 import { type CoinInfo, decimalToBase, resolveCoin } from '../coins'
+import { errMsg } from '../err'
 import type { OnchainRuntimeContext } from '../types'
 
 const Schema = z.object({
@@ -68,7 +69,7 @@ export function makeCetusQuote(ctx: OnchainRuntimeContext): ToolDef<Args> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

@@ -14,6 +14,7 @@ import { Transaction, coinWithBalance } from '@mysten/sui/transactions'
 import type { ToolDef } from 'lyra-core'
 import { stakeTovSuiPTB, unstakeTovSui } from 'navi-sdk'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import { simulateAndExecute } from '../execute'
 import { checkMinimum } from '../minimums'
 import { policyBlock, suiToMist } from '../policy'
@@ -84,7 +85,7 @@ export function makeVoloStake(ctx: OnchainRuntimeContext): ToolDef<StakeArgs> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -135,7 +136,7 @@ export function makeVoloUnstake(ctx: OnchainRuntimeContext): ToolDef<UnstakeArgs
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

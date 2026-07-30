@@ -30,9 +30,10 @@ import { LENDING_MARKET_ID, LENDING_MARKET_TYPE, SuilendClient } from '@suilend/
 import { initializeSuilend } from '@suilend/sdk/lib/initialize'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
-import { simulateAndExecute } from '../execute'
+import { errMsg } from '../err'
+import { runLendingWrite } from '../lending'
 import { checkMinimum } from '../minimums'
-import { policyBlock, suiToMist } from '../policy'
+import { suiToMist } from '../policy'
 import { PROTOCOL_IDS } from '../protocol-ids'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui } from '../vault-fund'
@@ -152,57 +153,42 @@ export function makeSuilendSupply(ctx: OnchainRuntimeContext): ToolDef<AmountArg
     searchHint: 'suilend supply deposit lend sui earn yield idle money market',
     schema: AmountSchema,
     handler: async args => {
-      const err = ensureMainnet(ctx)
-      if (err) return { ok: false, error: err }
       const amountMist = suiToMist(args.amount)
       if (amountMist === undefined || amountMist <= 0n)
         return { ok: false, error: `invalid amount "${args.amount}"` }
-      const tooSmall = checkMinimum('supply', amountMist)
-      if (tooSmall) return { ok: false, error: tooSmall }
-      const blocked = policyBlock(ctx.policy, {
-        kind: 'transfer',
-        coinType: SUI_TYPE,
-        amountMist,
+      return runLendingWrite(ctx, {
         protocol: 'suilend',
+        action: 'supply',
+        mainnetError: 'Suilend SDK supports mainnet only',
+        amountBase: amountMist,
+        coinType: SUI_TYPE,
+        minError: checkMinimum('supply', amountMist),
+        policyProtocol: 'suilend',
+        extra: { amountSui: args.amount },
+        build: async () => {
+          const suilend = await newSuilend(ctx)
+          const existing = await findObligation(ctx)
+          const tx = new Transaction()
+          tx.setSender(ctx.agentAddress)
+          // Source the supply from the treasury vault (policy-enforced) when wired.
+          const coin = fundSui(tx, ctx, amountMist, {
+            protocol: PROTOCOL_IDS.suilend,
+            kind: 'supply',
+            memo: 'suilend supply',
+          })
+          // The @suilend/sdk@1.1.x SDK carries its own nested @mysten/sui copy, so
+          // TS sees a distinct Transaction class — cast at the boundary. The two
+          // copies interop at runtime (verified with a live mainnet dry-run).
+          if (existing) {
+            suilend.deposit(coin as never, SUI_TYPE, existing.capId, tx as never)
+          } else {
+            const cap = suilend.createObligation(tx as never)
+            suilend.deposit(coin as never, SUI_TYPE, cap, tx as never)
+            tx.transferObjects([cap as never], ctx.agentAddress)
+          }
+          return { tx, extra: { newObligation: !existing } }
+        },
       })
-      if (blocked) return { ok: false, error: blocked }
-      try {
-        const suilend = await newSuilend(ctx)
-        const existing = await findObligation(ctx)
-        const tx = new Transaction()
-        tx.setSender(ctx.agentAddress)
-        // Source the supply from the treasury vault (policy-enforced) when wired.
-        const coin = fundSui(tx, ctx, amountMist, {
-          protocol: PROTOCOL_IDS.suilend,
-          kind: 'supply',
-          memo: 'suilend supply',
-        })
-        // The @suilend/sdk@1.1.x SDK carries its own nested @mysten/sui copy, so
-        // TS sees a distinct Transaction class — cast at the boundary. The two
-        // copies interop at runtime (verified with a live mainnet dry-run).
-        if (existing) {
-          suilend.deposit(coin as never, SUI_TYPE, existing.capId, tx as never)
-        } else {
-          const cap = suilend.createObligation(tx as never)
-          suilend.deposit(coin as never, SUI_TYPE, cap, tx as never)
-          tx.transferObjects([cap as never], ctx.agentAddress)
-        }
-        const exec = await simulateAndExecute(ctx, tx)
-        if (!exec.ok) return exec
-        return {
-          ok: true,
-          data: {
-            protocol: 'suilend',
-            action: 'supply',
-            amountSui: args.amount,
-            newObligation: !existing,
-            digest: exec.value.digest,
-            policyEnforced: ctx.policy != null,
-          },
-        }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
-      }
     },
   }
 }
@@ -217,47 +203,43 @@ export function makeSuilendWithdraw(ctx: OnchainRuntimeContext): ToolDef<AmountA
     searchHint: 'suilend withdraw redeem unlend remove supplied sui money market',
     schema: AmountSchema,
     handler: async args => {
-      const err = ensureMainnet(ctx)
-      if (err) return { ok: false, error: err }
       const amountMist = suiToMist(args.amount)
       if (amountMist === undefined || amountMist <= 0n)
         return { ok: false, error: `invalid amount "${args.amount}"` }
-      try {
-        const suilend = await newSuilend(ctx)
-        const obligation = await findObligation(ctx)
-        if (!obligation)
-          return { ok: false, error: 'no Suilend position — supply SUI before withdrawing' }
-        // Convert underlying → cTokens using the SUI reserve exchange rate.
-        const data = await initializeSuilend(ctx.client as never, suilend)
-        const rate = suiReserveExchangeRate(data)
-        if (rate === null) return { ok: false, error: 'could not read SUI reserve exchange rate' }
-        // cTokens = floor(underlying / rate); floor keeps us at/under the request.
-        const ctokens = BigInt(Math.floor(Number(amountMist) / rate))
-        if (ctokens <= 0n) return { ok: false, error: 'amount too small to withdraw' }
-        const tx = new Transaction()
-        tx.setSender(ctx.agentAddress)
-        await suilend.withdrawAndSendToUser(
-          ctx.agentAddress,
-          obligation.capId,
-          obligation.obligationId,
-          SUI_TYPE,
-          ctokens.toString(),
-          tx as never,
-        )
-        const exec = await simulateAndExecute(ctx, tx)
-        if (!exec.ok) return exec
-        return {
-          ok: true,
-          data: {
-            protocol: 'suilend',
-            action: 'withdraw',
-            amountSui: args.amount,
-            digest: exec.value.digest,
-          },
-        }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
-      }
+      // Withdraw only pulls the agent's own supplied funds back — no minimum, no
+      // policy gate.
+      return runLendingWrite(ctx, {
+        protocol: 'suilend',
+        action: 'withdraw',
+        mainnetError: 'Suilend SDK supports mainnet only',
+        amountBase: amountMist,
+        coinType: SUI_TYPE,
+        policyProtocol: null,
+        extra: { amountSui: args.amount },
+        build: async () => {
+          const suilend = await newSuilend(ctx)
+          const obligation = await findObligation(ctx)
+          if (!obligation) return { error: 'no Suilend position — supply SUI before withdrawing' }
+          // Convert underlying → cTokens using the SUI reserve exchange rate.
+          const data = await initializeSuilend(ctx.client as never, suilend)
+          const rate = suiReserveExchangeRate(data)
+          if (rate === null) return { error: 'could not read SUI reserve exchange rate' }
+          // cTokens = floor(underlying / rate); floor keeps us at/under the request.
+          const ctokens = BigInt(Math.floor(Number(amountMist) / rate))
+          if (ctokens <= 0n) return { error: 'amount too small to withdraw' }
+          const tx = new Transaction()
+          tx.setSender(ctx.agentAddress)
+          await suilend.withdrawAndSendToUser(
+            ctx.agentAddress,
+            obligation.capId,
+            obligation.obligationId,
+            SUI_TYPE,
+            ctokens.toString(),
+            tx as never,
+          )
+          return { tx }
+        },
+      })
     },
   }
 }
@@ -272,52 +254,40 @@ export function makeSuilendBorrow(ctx: OnchainRuntimeContext): ToolDef<BorrowArg
     searchHint: 'suilend borrow loan leverage debt against collateral usdc stablecoin money market',
     schema: BorrowSchema,
     handler: async args => {
-      const err = ensureMainnet(ctx)
-      if (err) return { ok: false, error: err }
       const parsed = resolveBorrowAmount(args)
       if ('error' in parsed) return { ok: false, error: parsed.error }
       const { coin, amountBase } = parsed
-      if (amountBase < coin.minBase)
-        return { ok: false, error: `amount too small: below the minimum ${coin.label} borrow` }
-      const blocked = policyBlock(ctx.policy, {
-        kind: 'transfer',
+      return runLendingWrite(ctx, {
+        protocol: 'suilend',
+        action: 'borrow',
+        mainnetError: 'Suilend SDK supports mainnet only',
+        amountBase,
         coinType: coin.type,
-        amountMist: amountBase,
-        protocol: 'borrow',
+        minError:
+          amountBase < coin.minBase
+            ? `amount too small: below the minimum ${coin.label} borrow`
+            : null,
+        policyProtocol: 'borrow',
+        extra: { amount: args.amount, coin: coin.label },
+        build: async () => {
+          const suilend = await newSuilend(ctx)
+          const obligation = await findObligation(ctx)
+          if (!obligation)
+            return { error: 'no Suilend position — supply collateral before borrowing' }
+          const tx = new Transaction()
+          tx.setSender(ctx.agentAddress)
+          // borrow() self-refreshes prices (addRefreshCalls default true).
+          await suilend.borrowAndSendToUser(
+            ctx.agentAddress,
+            obligation.capId,
+            obligation.obligationId,
+            coin.type,
+            amountBase.toString(),
+            tx as never,
+          )
+          return { tx }
+        },
       })
-      if (blocked) return { ok: false, error: blocked }
-      try {
-        const suilend = await newSuilend(ctx)
-        const obligation = await findObligation(ctx)
-        if (!obligation)
-          return { ok: false, error: 'no Suilend position — supply collateral before borrowing' }
-        const tx = new Transaction()
-        tx.setSender(ctx.agentAddress)
-        // borrow() self-refreshes prices (addRefreshCalls default true).
-        await suilend.borrowAndSendToUser(
-          ctx.agentAddress,
-          obligation.capId,
-          obligation.obligationId,
-          coin.type,
-          amountBase.toString(),
-          tx as never,
-        )
-        const exec = await simulateAndExecute(ctx, tx)
-        if (!exec.ok) return exec
-        return {
-          ok: true,
-          data: {
-            protocol: 'suilend',
-            action: 'borrow',
-            amount: args.amount,
-            coin: coin.label,
-            digest: exec.value.digest,
-            policyEnforced: ctx.policy != null,
-          },
-        }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
-      }
     },
   }
 }
@@ -332,46 +302,33 @@ export function makeSuilendRepay(ctx: OnchainRuntimeContext): ToolDef<BorrowArgs
     searchHint: 'suilend repay pay back debt loan close usdc stablecoin sui money market',
     schema: BorrowSchema,
     handler: async args => {
-      const err = ensureMainnet(ctx)
-      if (err) return { ok: false, error: err }
       const parsed = resolveBorrowAmount(args)
       if ('error' in parsed) return { ok: false, error: parsed.error }
       const { coin, amountBase } = parsed
-      const blocked = policyBlock(ctx.policy, {
-        kind: 'transfer',
-        coinType: coin.type,
-        amountMist: amountBase,
+      return runLendingWrite(ctx, {
         protocol: 'suilend',
+        action: 'repay',
+        mainnetError: 'Suilend SDK supports mainnet only',
+        amountBase,
+        coinType: coin.type,
+        policyProtocol: 'suilend',
+        extra: { amount: args.amount, coin: coin.label },
+        build: async () => {
+          const suilend = await newSuilend(ctx)
+          const obligation = await findObligation(ctx)
+          if (!obligation) return { error: 'no Suilend position — nothing to repay' }
+          const tx = new Transaction()
+          tx.setSender(ctx.agentAddress)
+          await suilend.repayIntoObligation(
+            ctx.agentAddress,
+            obligation.obligationId,
+            coin.type,
+            amountBase.toString(),
+            tx as never,
+          )
+          return { tx }
+        },
       })
-      if (blocked) return { ok: false, error: blocked }
-      try {
-        const suilend = await newSuilend(ctx)
-        const obligation = await findObligation(ctx)
-        if (!obligation) return { ok: false, error: 'no Suilend position — nothing to repay' }
-        const tx = new Transaction()
-        tx.setSender(ctx.agentAddress)
-        await suilend.repayIntoObligation(
-          ctx.agentAddress,
-          obligation.obligationId,
-          coin.type,
-          amountBase.toString(),
-          tx as never,
-        )
-        const exec = await simulateAndExecute(ctx, tx)
-        if (!exec.ok) return exec
-        return {
-          ok: true,
-          data: {
-            protocol: 'suilend',
-            action: 'repay',
-            amount: args.amount,
-            coin: coin.label,
-            digest: exec.value.digest,
-          },
-        }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
-      }
     },
   }
 }
@@ -420,7 +377,7 @@ export function makeSuilendPosition(ctx: OnchainRuntimeContext): ToolDef<Positio
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
