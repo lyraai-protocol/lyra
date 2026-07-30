@@ -13,9 +13,10 @@ import type { Transaction } from '@mysten/sui/transactions'
 import { Scallop } from '@scallop-io/sui-scallop-sdk'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
-import { simulateAndExecute } from '../execute'
+import { errMsg } from '../err'
+import { type LendingResult, runLendingWrite } from '../lending'
 import { checkMinimum } from '../minimums'
-import { policyBlock, suiToMist } from '../policy'
+import { suiToMist } from '../policy'
 import { PROTOCOL_IDS } from '../protocol-ids'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui, returnSuiToVault } from '../vault-fund'
@@ -69,13 +70,13 @@ export function makeScallopMarkets(ctx: OnchainRuntimeContext): ToolDef<MarketsA
                 utilization: p?.utilizationRate ?? null,
               }
             } catch (e) {
-              return { coin, error: (e as Error).message.slice(0, 100) }
+              return { coin, error: errMsg(e, 100) }
             }
           }),
         )
         return { ok: true, data: { protocol: 'scallop', network: 'mainnet', pools } }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -119,7 +120,7 @@ export function makeScallopPosition(ctx: OnchainRuntimeContext): ToolDef<Positio
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -168,52 +169,27 @@ async function scallopRedeemAmount(
   return redeemMc
 }
 
+// Supply gates on the minimum + policy; withdraw only pulls the agent's own funds
+// back, so it's exempt. The shared pipeline runs the mainnet/policy/simulate path.
 async function runScallopWrite(
   ctx: OnchainRuntimeContext,
   amount: string,
   kind: 'supply' | 'withdraw',
-): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
-  const err = ensureMainnet(ctx)
-  if (err) return { ok: false, error: err }
+): Promise<LendingResult> {
   const amountMist = suiToMist(amount)
   if (amountMist === undefined || amountMist <= 0n)
     return { ok: false, error: `invalid amount "${amount}"` }
-  // Minimum guard + policy gate on the value-moving supply (withdraw pulls the
-  // agent's own funds back).
-  if (kind === 'supply') {
-    const tooSmall = checkMinimum('supply', amountMist)
-    if (tooSmall) return { ok: false, error: tooSmall }
-    const blocked = policyBlock(ctx.policy, {
-      kind: 'transfer',
-      coinType: SUI_TYPE,
-      amountMist,
-      protocol: 'scallop',
-    })
-    if (blocked) return { ok: false, error: blocked }
-  }
-
-  try {
-    const sdk = await newScallop(ctx)
-    const built = await buildScallopWriteTx(ctx, sdk, amountMist, kind)
-    if ('error' in built) return { ok: false, error: built.error }
-
-    // Simulate-before-write, then execute + wait for indexing (shared helper).
-    const exec = await simulateAndExecute(ctx, built.tx)
-    if (!exec.ok) return exec
-    return {
-      ok: true,
-      data: {
-        protocol: 'scallop',
-        action: kind,
-        amountSui: amount,
-        digest: exec.value.digest,
-        simGasUsed: exec.value.gasUsed,
-        policyEnforced: ctx.policy != null,
-      },
-    }
-  } catch (e) {
-    return { ok: false, error: (e as Error).message.slice(0, 240) }
-  }
+  return runLendingWrite(ctx, {
+    protocol: 'scallop',
+    action: kind,
+    mainnetError: 'Scallop SDK supports mainnet only',
+    amountBase: amountMist,
+    coinType: SUI_TYPE,
+    minError: kind === 'supply' ? checkMinimum('supply', amountMist) : null,
+    policyProtocol: kind === 'supply' ? 'scallop' : null,
+    extra: { amountSui: amount },
+    build: async () => buildScallopWriteTx(ctx, await newScallop(ctx), amountMist, kind),
+  })
 }
 
 /**

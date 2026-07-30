@@ -12,9 +12,10 @@ import { Transaction } from '@mysten/sui/transactions'
 import type { ToolDef } from 'lyra-core'
 import { NAVISDKClient, borrowCoin, depositCoin, pool, repayDebt, withdrawCoin } from 'navi-sdk'
 import { z } from 'zod'
-import { simulateAndExecute } from '../execute'
+import { errMsg } from '../err'
+import { type LendingResult, runLendingWrite } from '../lending'
 import { checkMinimum } from '../minimums'
-import { policyBlock, suiToMist } from '../policy'
+import { suiToMist } from '../policy'
 import { PROTOCOL_IDS } from '../protocol-ids'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui, returnSuiToVault } from '../vault-fund'
@@ -60,7 +61,7 @@ export function makeNaviMarkets(ctx: OnchainRuntimeContext): ToolDef<Record<stri
           .slice(0, 12)
         return { ok: true, data: { protocol: 'navi', network: 'mainnet', pools } }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -96,7 +97,7 @@ export function makeNaviPosition(ctx: OnchainRuntimeContext): ToolDef<Record<str
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -152,50 +153,25 @@ async function runNaviWrite(
   ctx: OnchainRuntimeContext,
   amount: string,
   kind: 'supply' | 'withdraw' | 'borrow' | 'repay',
-): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
-  const err = ensureMainnet(ctx)
-  if (err) return { ok: false, error: err }
+): Promise<LendingResult> {
   const amountMist = suiToMist(amount)
   if (amountMist === undefined || amountMist <= 0n)
     return { ok: false, error: `invalid amount "${amount}"` }
-  // Minimum guard for value-moving actions (withdraw brings value back in).
+  // supply/repay gate on the 'supply' minimum, borrow on 'borrow'; withdraw brings
+  // value back in (no minimum). Policy gates every value-moving action EXCEPT withdraw
+  // (borrow tagged 'borrow', supply/repay tagged 'navi').
   const minAction = kind === 'borrow' ? 'borrow' : kind === 'withdraw' ? null : 'supply'
-  const tooSmall = minAction ? checkMinimum(minAction, amountMist) : null
-  if (tooSmall) return { ok: false, error: tooSmall }
-
-  // Policy gate on value-moving actions (borrow creates debt + hands out funds;
-  // repay/supply move SUI out). Withdraw pulls the agent's own funds back.
-  const protocol = kind === 'borrow' ? 'borrow' : 'navi'
-  if (kind !== 'withdraw') {
-    const blocked = policyBlock(ctx.policy, {
-      kind: 'transfer',
-      coinType: SUI_TYPE,
-      amountMist,
-      protocol,
-    })
-    if (blocked) return { ok: false, error: blocked }
-  }
-
-  try {
-    const tx = await buildNaviTx(ctx, kind, amountMist)
-    // Simulate-before-write, then execute + wait for indexing so a follow-up
-    // action doesn't race NAVI's not-yet-settled accounting (shared helper).
-    const exec = await simulateAndExecute(ctx, tx)
-    if (!exec.ok) return exec
-    return {
-      ok: true,
-      data: {
-        protocol: 'navi',
-        action: kind,
-        amountSui: amount,
-        digest: exec.value.digest,
-        simGasUsed: exec.value.gasUsed,
-        policyEnforced: ctx.policy != null,
-      },
-    }
-  } catch (e) {
-    return { ok: false, error: (e as Error).message.slice(0, 240) }
-  }
+  return runLendingWrite(ctx, {
+    protocol: 'navi',
+    action: kind,
+    mainnetError: 'NAVI SDK supports mainnet only',
+    amountBase: amountMist,
+    coinType: SUI_TYPE,
+    minError: minAction ? checkMinimum(minAction, amountMist) : null,
+    policyProtocol: kind === 'withdraw' ? null : kind === 'borrow' ? 'borrow' : 'navi',
+    extra: { amountSui: amount },
+    build: async () => ({ tx: await buildNaviTx(ctx, kind, amountMist) }),
+  })
 }
 
 export function makeNaviSupply(ctx: OnchainRuntimeContext): ToolDef<AmountArgs> {

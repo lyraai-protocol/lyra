@@ -11,6 +11,7 @@
 import { Transaction } from '@mysten/sui/transactions'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import { simulateAndExecute } from '../execute'
 import { checkMinimum } from '../minimums'
 import { policyBlock, suiToMist } from '../policy'
@@ -137,7 +138,7 @@ export function makeSuiSend(ctx: OnchainRuntimeContext): ToolDef<Args> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

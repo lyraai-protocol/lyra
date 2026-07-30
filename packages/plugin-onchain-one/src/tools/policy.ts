@@ -12,6 +12,7 @@ import { bcs } from '@mysten/sui/bcs'
 import { Transaction } from '@mysten/sui/transactions'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import { submit } from '../execute'
 import { type SuiPolicy, suiToMist } from '../policy'
 import type { OnchainRuntimeContext } from '../types'
@@ -222,7 +223,7 @@ export function makePolicyCreate(ctx: OnchainRuntimeContext): ToolDef<CreateArgs
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

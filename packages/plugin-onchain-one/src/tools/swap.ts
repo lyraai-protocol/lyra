@@ -18,6 +18,7 @@ import {
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
 import { type CoinInfo, decimalToBase, resolveCoin } from '../coins'
+import { errMsg } from '../err'
 import { submit } from '../execute'
 import { checkMinimum } from '../minimums'
 import { normalizeCoinType, policyBlock } from '../policy'
@@ -169,7 +170,7 @@ async function pickCleanRoute(
       }
       failures.push(`${q.provider}: ${sim.reason}`)
     } catch (e) {
-      failures.push(`${q.provider}: ${(e as Error).message.slice(0, 60)}`)
+      failures.push(`${q.provider}: ${errMsg(e, 60)}`)
     }
   }
   return { failures }
@@ -218,6 +219,58 @@ const Schema = z.object({
 })
 type Args = z.infer<typeof Schema>
 
+// Resolve coins → policy gate → quote across routes → pick a route that simulates
+// cleanly → execute. Thrown errors are normalized by the handler's catch.
+async function runSwap(
+  ctx: OnchainRuntimeContext,
+  args: Args,
+): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  const resolved = await resolveSwapCoins(ctx, args)
+  if ('error' in resolved) return { ok: false, error: resolved.error }
+  const { from, to, amountIn } = resolved
+
+  // The slippage we'll actually enforce on the route: the caller's request (or a
+  // tight 0.5% default). The policy check below BLOCKS it if it exceeds the cap.
+  const requestedSlippageBps = args.slippageBps ?? DEFAULT_SLIPPAGE_BPS
+
+  // Policy gate. The MIST per-tx cap is SUI-denominated, so it only bounds SUI-input
+  // swaps; the slippage/protocol/expiry checks always apply.
+  const blocked = policyBlock(ctx.policy, {
+    kind: 'swap',
+    coinType: from.type,
+    amountMist: from.type === SUI_TYPE ? amountIn : 0n,
+    toCoinType: to.type,
+    protocol: 'swap',
+    slippageBps: requestedSlippageBps,
+  })
+  if (blocked) return { ok: false, error: blocked }
+
+  const ag = new MetaAg({
+    slippageBps: requestedSlippageBps,
+    // Cetus routes need a Pyth Hermes URL or they fail on missing pythUrls.
+    hermesApi: process.env.LYRA_HERMES_API ?? 'https://hermes.pyth.network',
+  })
+  // Quote without the SDK's internal pre-simulation (it throws on routes it can't
+  // simulate); we simulate the chosen route ourselves in pickCleanRoute.
+  const quotes = (
+    await ag.quote({
+      coinTypeIn: from.type,
+      coinTypeOut: to.type,
+      amountIn: amountIn.toString(),
+      signer: ctx.agentAddress,
+    })
+  )
+    .filter(Boolean)
+    .sort((a, b) => Number(b.amountOut ?? 0) - Number(a.amountOut ?? 0))
+  if (quotes.length === 0) return { ok: false, error: 'no swap route found' }
+
+  const picked = await pickCleanRoute(ctx, ag, quotes, resolved, args.to)
+  if ('failures' in picked) {
+    return { ok: false, error: `no route simulated cleanly — ${picked.failures.join(' | ')}` }
+  }
+  return executePickedRoute(ctx, picked, args, to, requestedSlippageBps)
+}
+
 export function makeSwap(ctx: OnchainRuntimeContext): ToolDef<Args> {
   return {
     name: 'swap',
@@ -228,55 +281,9 @@ export function makeSwap(ctx: OnchainRuntimeContext): ToolDef<Args> {
     handler: async args => {
       if (ctx.network !== 'mainnet') return { ok: false, error: 'swap supports mainnet only' }
       try {
-        const resolved = await resolveSwapCoins(ctx, args)
-        if ('error' in resolved) return { ok: false, error: resolved.error }
-        const { from, to, amountIn } = resolved
-
-        // The slippage we'll actually enforce on the route: the caller's request
-        // (or a tight 0.5% default). The policy check below BLOCKS it if it
-        // exceeds the policy's max — so the cap is real, not a comparison of the
-        // policy value against itself.
-        const requestedSlippageBps = args.slippageBps ?? DEFAULT_SLIPPAGE_BPS
-
-        // Policy gate. The MIST per-tx cap is SUI-denominated, so it only bounds
-        // SUI-input swaps; the slippage/protocol/expiry checks always apply.
-        const blocked = policyBlock(ctx.policy, {
-          kind: 'swap',
-          coinType: from.type,
-          amountMist: from.type === SUI_TYPE ? amountIn : 0n,
-          toCoinType: to.type,
-          protocol: 'swap',
-          slippageBps: requestedSlippageBps,
-        })
-        if (blocked) return { ok: false, error: blocked }
-
-        const me = ctx.agentAddress
-        const ag = new MetaAg({
-          slippageBps: requestedSlippageBps,
-          // Cetus routes need a Pyth Hermes URL or they fail on missing pythUrls.
-          hermesApi: process.env.LYRA_HERMES_API ?? 'https://hermes.pyth.network',
-        })
-        // Quote without the SDK's internal pre-simulation (it throws on routes it
-        // can't simulate); we simulate the chosen route ourselves below.
-        const quotes = (
-          await ag.quote({
-            coinTypeIn: from.type,
-            coinTypeOut: to.type,
-            amountIn: amountIn.toString(),
-            signer: me,
-          })
-        )
-          .filter(Boolean)
-          .sort((a, b) => Number(b.amountOut ?? 0) - Number(a.amountOut ?? 0))
-        if (quotes.length === 0) return { ok: false, error: 'no swap route found' }
-
-        const picked = await pickCleanRoute(ctx, ag, quotes, resolved, args.to)
-        if ('failures' in picked) {
-          return { ok: false, error: `no route simulated cleanly — ${picked.failures.join(' | ')}` }
-        }
-        return await executePickedRoute(ctx, picked, args, to, requestedSlippageBps)
+        return await runSwap(ctx, args)
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

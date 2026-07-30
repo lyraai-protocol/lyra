@@ -6,6 +6,7 @@
 import { DeepBookClient } from '@mysten/deepbook-v3'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import type { OnchainRuntimeContext } from '../types'
 
 /** Core mainnet pool keys shipped with the DeepBook SDK config. */
@@ -47,13 +48,13 @@ export function makeDeepbookMarkets(ctx: OnchainRuntimeContext): ToolDef<Args> {
               const mid = await db.midPrice(pool)
               return { pool, midPrice: mid }
             } catch (e) {
-              return { pool, error: (e as Error).message.slice(0, 120) }
+              return { pool, error: errMsg(e, 120) }
             }
           }),
         )
         return { ok: true, data: { network: ctx.network, markets } }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

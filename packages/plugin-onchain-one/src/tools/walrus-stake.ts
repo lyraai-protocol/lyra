@@ -22,6 +22,7 @@ import {
 } from '@mysten/walrus'
 import type { ToolDef } from 'lyra-core'
 import { z } from 'zod'
+import { errMsg } from '../err'
 import { simulateAndExecute } from '../execute'
 import { policyBlock, suiToMist } from '../policy'
 import type { OnchainRuntimeContext } from '../types'
@@ -219,7 +220,7 @@ export function makeWalrusStake(ctx: OnchainRuntimeContext): ToolDef<StakeArgs> 
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -284,7 +285,7 @@ export function makeWalrusUnstake(ctx: OnchainRuntimeContext): ToolDef<UnstakeAr
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
@@ -328,7 +329,7 @@ export function makeWalrusStaking(ctx: OnchainRuntimeContext): ToolDef<ReadArgs>
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }

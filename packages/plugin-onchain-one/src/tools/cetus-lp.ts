@@ -30,6 +30,7 @@ import {
   tickToU32,
 } from '../cetus-pools'
 import { decimalToBase } from '../coins'
+import { errMsg } from '../err'
 import { submit } from '../execute'
 import { checkMinimum } from '../minimums'
 import { policyBlock } from '../policy'
@@ -202,7 +203,7 @@ export function makeCetusLp(ctx: OnchainRuntimeContext): ToolDef<Args> {
           },
         }
       } catch (e) {
-        return { ok: false, error: (e as Error).message.slice(0, 240) }
+        return { ok: false, error: errMsg(e) }
       }
     },
   }
