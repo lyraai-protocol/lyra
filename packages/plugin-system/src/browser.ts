@@ -11,7 +11,14 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
-import { type ToolDef, type VisionInferFn, coerceBool, coerceInt, redactEnv } from 'lyra-core'
+import {
+  type ToolDef,
+  type VisionInferFn,
+  coerceBool,
+  coerceInt,
+  errMsg,
+  redactEnv,
+} from 'lyra-core'
 import { z } from 'zod'
 import { sniffMimeFromBytes } from './vision'
 
@@ -654,7 +661,7 @@ export function makeBrowserVision(
           },
         }
       } catch (e) {
-        return { ok: false, error: `vision call failed: ${(e as Error).message.slice(0, 240)}` }
+        return { ok: false, error: `vision call failed: ${errMsg(e, 240)}` }
       }
     },
   }

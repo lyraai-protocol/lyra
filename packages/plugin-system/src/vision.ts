@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute } from 'node:path'
-import { PathGuard, type ToolDef, type VisionInferFn } from 'lyra-core'
+import { PathGuard, type ToolDef, type VisionInferFn, errMsg } from 'lyra-core'
 import { z } from 'zod'
 import { collectUpToBytes, hostIsPrivate } from './web-fetch'
 
@@ -155,7 +155,7 @@ export function makeVisionAnalyze(deps: VisionAnalyzeDeps): ToolDef<VisionArgs> 
           },
         }
       } catch (e) {
-        return { ok: false, error: `vision call failed: ${(e as Error).message.slice(0, 240)}` }
+        return { ok: false, error: `vision call failed: ${errMsg(e, 240)}` }
       }
     },
   }

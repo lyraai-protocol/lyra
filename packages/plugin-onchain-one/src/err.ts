@@ -1,9 +1,3 @@
-/**
- * Normalize any thrown value into a short, safe error string. Used across the tools
- * so error output is consistent and the cap lives in one place — tool results are fed
- * back to the model, so a bounded message keeps a stack-trace dump out of the context.
- */
-export function errMsg(e: unknown, len = 240): string {
-  const m = e instanceof Error ? e.message : String(e)
-  return m.slice(0, len)
-}
+// The shared error normalizer now lives in lyra-core; re-exported here so the tool
+// files can keep importing it locally.
+export { errMsg } from 'lyra-core'

@@ -15,7 +15,7 @@
  * over-cap action and explains what the write path would do.
  */
 
-import { formatSui, getSuiBalanceMist } from 'lyra-core'
+import { errMsg, formatSui, getSuiBalanceMist } from 'lyra-core'
 import onchainPlugin, {
   type OnchainRuntimeContext,
   type SuiPolicy,
@@ -162,7 +162,7 @@ async function runTool(
     if (res.ok === false) console.log(`   ${name} failed: ${res.error}`)
     else console.log(`   ${name} ok: ${JSON.stringify(res.data)}`)
   } catch (e) {
-    console.log(`   ${name} threw: ${(e as Error).message.slice(0, 200)}`)
+    console.log(`   ${name} threw: ${errMsg(e, 200)}`)
   }
   console.log('')
 }
