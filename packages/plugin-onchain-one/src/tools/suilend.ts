@@ -33,7 +33,7 @@ import { z } from 'zod'
 import { errMsg } from '../err'
 import { runLendingWrite } from '../lending'
 import { checkMinimum } from '../minimums'
-import { suiToMist } from '../policy'
+import { decimalToBase, suiToMist } from '../policy'
 import { PROTOCOL_IDS } from '../protocol-ids'
 import type { OnchainRuntimeContext } from '../types'
 import { fundSui } from '../vault-fund'
@@ -107,21 +107,6 @@ const BORROW_COINS: Record<'usdc' | 'sui', CoinInfo> = {
   sui: { type: SUI_TYPE, decimals: 9, minBase: 10_000_000n, label: 'SUI' }, // 0.01 SUI
 }
 
-/** Parse a decimal amount into base units for a given decimals count. */
-function toBaseUnits(amount: string, decimals: number): bigint | undefined {
-  const a = amount.trim()
-  if (!/^\d+(\.\d+)?$/.test(a)) return undefined
-  const dot = a.indexOf('.')
-  const whole = dot === -1 ? a : a.slice(0, dot)
-  const frac = dot === -1 ? '' : a.slice(dot + 1)
-  const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals)
-  try {
-    return BigInt(whole || '0') * 10n ** BigInt(decimals) + BigInt(fracPadded || '0')
-  } catch {
-    return undefined
-  }
-}
-
 const BorrowSchema = z.object({
   amount: z.string().min(1).describe('Amount to borrow/repay, e.g. "5".'),
   coin: z
@@ -139,7 +124,7 @@ function resolveBorrowAmount(
   args: BorrowArgs,
 ): { coin: CoinInfo; amountBase: bigint } | { error: string } {
   const coin = BORROW_COINS[args.coin ?? 'usdc']
-  const amountBase = toBaseUnits(args.amount, coin.decimals)
+  const amountBase = decimalToBase(args.amount, coin.decimals)
   if (amountBase === undefined || amountBase <= 0n)
     return { error: `invalid amount "${args.amount}"` }
   return { coin, amountBase }
