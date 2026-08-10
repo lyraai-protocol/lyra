@@ -135,9 +135,16 @@ interface Preflight {
   swapMist: bigint
 }
 
+// Off-chain policy protocol tag. The off-chain allowlist is TAG-based (like every
+// sibling tool: 'swap', 'navi', 'stake', …; see policyFromEnv's ALLOWED_PROTOCOLS
+// example). The on-chain draw uses the CETUS_INTEGRATE *address* — a different
+// namespace — so passing the address here would never match a tag allowlist and
+// would wrongly block LP under protocol-allowlist hardening.
+const POLICY_PROTOCOL = 'cetus'
+
 // Resolve pool, parse the amount, and run the policy/minimum gates. Kept out of the
 // handler so it stays flat. Returns an error string the handler surfaces verbatim.
-function preflight(ctx: OnchainRuntimeContext, args: Args): Preflight | { error: string } {
+export function preflight(ctx: OnchainRuntimeContext, args: Args): Preflight | { error: string } {
   const pool = resolveCetusPool(args.pool ?? 'sui-usdc')
   if (!pool)
     return {
@@ -155,7 +162,7 @@ function preflight(ctx: OnchainRuntimeContext, args: Args): Preflight | { error:
     coinType: SUI_TYPE,
     amountMist,
     toCoinType: pairType,
-    protocol: CETUS_INTEGRATE,
+    protocol: POLICY_PROTOCOL,
     slippageBps: SLIPPAGE_BPS,
   })
   if (blocked) return { error: blocked }
