@@ -68,6 +68,30 @@ async function resolveWalrus(ctx: OnchainRuntimeContext): Promise<WalrusStaking>
   return { pkg: stakingObj.package_id, stakingId: cfg.stakingPoolId, walType, walrus }
 }
 
+/**
+ * StakedWal object ids the agent owns, matched by the type SUFFIX rather than a
+ * StructType filter built from a single package id. `StakedWal` is defined in the
+ * Walrus SYSTEM package, not the WAL-coin package (`walType`'s package) — filtering
+ * by the coin package matched nothing, so unstake/staking always reported "no
+ * position". Suffix matching also survives Walrus package upgrades (same logic the
+ * stake path uses on the freshly-created object). Pages until exhausted.
+ */
+async function ownedStakedWalIds(
+  client: OnchainRuntimeContext['client'],
+  owner: string,
+): Promise<string[]> {
+  const ids: string[] = []
+  let cursor: string | null | undefined
+  do {
+    const page = await client.getOwnedObjects({ owner, cursor, options: { showType: true } })
+    for (const o of page.data) {
+      if (o.data?.type?.endsWith(STAKED_WAL_SUFFIX) && o.data.objectId) ids.push(o.data.objectId)
+    }
+    cursor = page.hasNextPage ? page.nextCursor : null
+  } while (cursor)
+  return ids
+}
+
 /** Pick a storage node to stake with: match `want` by node id, else the node with
  *  the most stake weight (a large, reliable committee member). */
 async function resolveNode(
@@ -249,11 +273,7 @@ export function makeWalrusUnstake(ctx: OnchainRuntimeContext): ToolDef<UnstakeAr
 
         let stakedId = args.stakedWalId?.trim()
         if (!stakedId) {
-          const owned = await ctx.client.getOwnedObjects({
-            owner: ctx.agentAddress,
-            filter: { StructType: `${walType.split('::')[0]}${STAKED_WAL_SUFFIX}` },
-          })
-          stakedId = owned.data[0]?.data?.objectId
+          stakedId = (await ownedStakedWalIds(ctx.client, ctx.agentAddress))[0]
           if (!stakedId) return { ok: false, error: 'no StakedWal position found to unstake' }
         }
 
@@ -306,13 +326,9 @@ export function makeWalrusStaking(ctx: OnchainRuntimeContext): ToolDef<ReadArgs>
     handler: async () => {
       try {
         const { walType, walrus } = await resolveWalrus(ctx)
-        const [bal, owned, state] = await Promise.all([
+        const [bal, stakedIds, state] = await Promise.all([
           ctx.client.getBalance({ owner: ctx.agentAddress, coinType: walType }),
-          ctx.client.getOwnedObjects({
-            owner: ctx.agentAddress,
-            filter: { StructType: `${walType.split('::')[0]}${STAKED_WAL_SUFFIX}` },
-            options: { showType: true },
-          }),
+          ownedStakedWalIds(ctx.client, ctx.agentAddress),
           walrus.systemState(),
         ])
         const topNodes = [...state.committee.members]
@@ -323,7 +339,7 @@ export function makeWalrusStaking(ctx: OnchainRuntimeContext): ToolDef<ReadArgs>
           ok: true,
           data: {
             walBalance: fmtWal(BigInt(bal.totalBalance)),
-            stakedPositions: owned.data.map(o => o.data?.objectId).filter(Boolean),
+            stakedPositions: stakedIds,
             committeeSize: state.committee.members.length,
             topNodes,
           },

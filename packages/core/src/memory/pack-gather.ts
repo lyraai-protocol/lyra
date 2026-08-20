@@ -15,7 +15,7 @@
 
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { PackBlob } from './pack-blob'
+import { type PackBlob, SAFE_NAME } from './pack-blob'
 
 /** Files inside memory/agent/ that have their own slot and must NOT be packed. */
 const AGENT_PACK_EXCLUDED = new Set(['identity.md', 'persona.md'])
@@ -107,6 +107,9 @@ async function writePack(rootPath: string, partitionDir: string, blob: PackBlob)
   }
   await mkdir(partitionDir, { recursive: true })
   for (const [name, content] of Object.entries(blob.files)) {
+    // Defense-in-depth: never write a name that could escape partitionDir, even if
+    // a caller hands us a blob that didn't go through decodePackBlob's SAFE_NAME check.
+    if (!SAFE_NAME.test(name)) continue
     await writeFile(join(partitionDir, name), content)
   }
 }

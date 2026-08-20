@@ -6,7 +6,9 @@
  * on-disk encrypted-blob flow is gone. The agent reads:
  *
  *   TELEGRAM_BOT_TOKEN   — from @BotFather (required to enable the gateway)
- *   TELEGRAM_CHAT_ID     — optional sole allowed DM user (blank = open access)
+ *   TELEGRAM_CHAT_ID     — allowed DM user id(s), comma/space-separated. Blank means
+ *                          NO allowlist → the bot default-denies all DMs (unless a
+ *                          pairing store is wired). It is NOT "open access".
  *   TELEGRAM_USERNAME    — optional cached bot @username for nicer status output
  *
  * This module keeps the pure token/allowlist validators plus the Telegram
@@ -26,10 +28,13 @@ export function telegramSecretsFromEnv(): TelegramEnvSecrets | null {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
   if (!botToken) return null
   const chatId = process.env.TELEGRAM_CHAT_ID
+  // Parse a comma/space list and validate. An invalid value → [] (fail-closed),
+  // never [NaN] (which silently drops every message while looking configured).
+  const parsed = chatId ? parseAllowedUserIds(chatId) : { ok: true as const, ids: [] }
   return {
     botToken,
     botUsername: process.env.TELEGRAM_USERNAME,
-    allowedUserIds: chatId ? [Number(chatId)] : [],
+    allowedUserIds: parsed.ok ? parsed.ids : [],
   }
 }
 

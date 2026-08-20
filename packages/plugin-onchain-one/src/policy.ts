@@ -38,6 +38,19 @@ export function normalizeCoinType(input: string): string {
 
 const lc = (a: string): string => a.trim().toLowerCase()
 
+/**
+ * Canonical Sui address for allowlist comparison: lowercase, `0x` + 64 hex
+ * (zero-padded), so `0x2` and its fully-padded form compare EQUAL — matching the
+ * on-chain gate, where Move addresses are already canonical. Non-address input
+ * falls back to lowercase. Used for the recipient allowlist (bare addresses);
+ * the protocol allowlist stays `lc` because those values are short tags, not
+ * addresses.
+ */
+const normAddr = (a: string): string => {
+  const hex = a.trim().toLowerCase().replace(/^0x/, '')
+  return /^[0-9a-f]{1,64}$/.test(hex) ? `0x${hex.padStart(64, '0')}` : a.trim().toLowerCase()
+}
+
 export interface SuiPolicy {
   /** Reject every write (read-only agent). */
   readOnly?: boolean
@@ -147,7 +160,7 @@ export function evaluatePolicy(
       `protocol ${action.protocol} is not in the protocol allowlist`,
     ],
     [
-      action.to !== undefined && outsideAllowlist(policy.recipientAllowlist, action.to, lc),
+      action.to !== undefined && outsideAllowlist(policy.recipientAllowlist, action.to, normAddr),
       `recipient ${action.to} is not in the recipient allowlist`,
     ],
     [

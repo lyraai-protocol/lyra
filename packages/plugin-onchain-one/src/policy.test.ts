@@ -45,6 +45,13 @@ describe('evaluatePolicy', () => {
     expect(v.allowed).toBe(true)
   })
 
+  it('matches the same recipient across short/padded address forms (like the on-chain gate)', () => {
+    const short = '0x2'
+    const padded = `0x${'0'.repeat(63)}2`
+    expect(evaluatePolicy(send({ to: short }), { recipientAllowlist: [padded] }).allowed).toBe(true)
+    expect(evaluatePolicy(send({ to: padded }), { recipientAllowlist: [short] }).allowed).toBe(true)
+  })
+
   it('blocks a coin not in the coin allowlist', () => {
     const v = evaluatePolicy(send({ coinType: '0xdead::x::X' }), { coinAllowlist: [SUI] })
     expect(v.allowed).toBe(false)

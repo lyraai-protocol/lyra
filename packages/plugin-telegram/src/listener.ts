@@ -161,9 +161,13 @@ export class TelegramListener {
       await answerCallbackSafe(ctx, 'malformed approval callback')
       return
     }
-    if (this.opts.allowedUserIds.length > 0 && !this.opts.allowedUserIds.includes(q.from.id)) {
+    // Approvals are fail-CLOSED, matching the inbound message gate (sanitize.ts
+    // default-denies an empty allowlist): only an allowlisted user may approve a
+    // fund-moving action. Previously an empty allowlist skipped this check, so ANY
+    // user could click Approve.
+    if (!this.opts.allowedUserIds.includes(q.from.id)) {
       console.log(
-        `[telegram] callback_query dropped: unauthorized user=${q.from.id} (allowlist=${this.opts.allowedUserIds.join(',')})`,
+        `[telegram] callback_query dropped: unauthorized user=${q.from.id} (allowlist=${this.opts.allowedUserIds.join(',') || 'empty'})`,
       )
       await answerCallbackSafe(ctx, '⛔ You are not authorized to approve commands.')
       return

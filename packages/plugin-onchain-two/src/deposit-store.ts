@@ -96,7 +96,10 @@ export class InMemoryDepositStore implements DepositStore {
   }
 
   listByOwner(owner: string): PendingDeposit[] {
-    return [...this.byId.values()].filter(d => d.owner === owner).map(d => ({ ...d }))
+    // Owners are stored lowercased (validateDepositRequest), so lowercase the query
+    // too — a mixed-case owner would otherwise match none of its own deposits.
+    const key = owner.toLowerCase()
+    return [...this.byId.values()].filter(d => d.owner === key).map(d => ({ ...d }))
   }
 
   listActive(): PendingDeposit[] {
