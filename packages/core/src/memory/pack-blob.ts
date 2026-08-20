@@ -45,7 +45,7 @@
  * time.
  */
 
-const SAFE_NAME = /^[a-z0-9][a-z0-9._-]{0,63}\.md$/
+export const SAFE_NAME = /^[a-z0-9][a-z0-9._-]{0,63}\.md$/
 
 export const PACK_BLOB_VERSION = 2 as const
 

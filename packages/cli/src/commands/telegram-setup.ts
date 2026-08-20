@@ -42,7 +42,8 @@ export async function runTelegramSetup(): Promise<void> {
   }
 
   const idsRaw = await text({
-    message: 'Allowed Telegram user id (blank = open access). Sets TELEGRAM_CHAT_ID.',
+    message:
+      'Allowed Telegram user id(s), comma/space-separated (blank = no allowlist → bot answers no one). Sets TELEGRAM_CHAT_ID.',
     placeholder: '',
     validate: v => {
       const r = parseAllowedUserIds(v ?? '')
@@ -54,7 +55,9 @@ export async function runTelegramSetup(): Promise<void> {
     return
   }
   const parsed = parseAllowedUserIds(String(idsRaw ?? ''))
-  const chatId = parsed.ok && parsed.ids.length > 0 ? parsed.ids[0] : null
+  // Persist ALL entered ids, not just the first — the env + runtime both accept a
+  // comma-separated list, so keeping only ids[0] silently locked out the rest.
+  const ids = parsed.ok ? parsed.ids : []
 
   // Enable the telegram plugin in config so `lyra` loads the listener when the
   // env token is present.
@@ -69,12 +72,14 @@ export async function runTelegramSetup(): Promise<void> {
   // token automatically — no manual export.
   const envPath = setDotenvVar('TELEGRAM_BOT_TOKEN', String(token))
   setDotenvVar('TELEGRAM_USERNAME', info.username)
-  if (chatId) setDotenvVar('TELEGRAM_CHAT_ID', String(chatId))
+  if (ids.length > 0) setDotenvVar('TELEGRAM_CHAT_ID', ids.join(','))
 
   note(
     [
       `Saved to ${envPath} (loaded automatically).`,
-      chatId ? `Allowed user id: ${chatId}` : 'Open access (no allowlist).',
+      ids.length > 0
+        ? `Allowed user id(s): ${ids.join(', ')}`
+        : 'No allowlist set — the bot will not answer DMs until you add one.',
       '',
       'Run the bot:',
       '  lyra                — responds while the chat is open',

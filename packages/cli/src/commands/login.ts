@@ -122,8 +122,10 @@ export async function deviceLink(deps: LoginDeps): Promise<LoginResult> {
     }
     const poll = (await pollRes.json()) as LoginPoll
     if (poll.status === 'approved') {
-      const keyPath = writeAgentKey(poll.agentKey)
+      // Validate the key BEFORE persisting it — a bad server response must not
+      // leave a corrupt agent.key on disk that then breaks every later command.
       const address = keypairFromSecret(poll.agentKey).toSuiAddress()
+      const keyPath = writeAgentKey(poll.agentKey)
       return { owner: poll.owner, address, keyPath }
     }
     if (poll.status === 'expired') {

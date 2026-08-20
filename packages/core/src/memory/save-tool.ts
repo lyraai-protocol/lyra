@@ -14,11 +14,19 @@ import {
 } from './types'
 
 const saveSchema = z.object({
-  name: z.string().min(3).max(64).describe('Short human-readable title for this memory.'),
+  // No newlines: both land on a single `- [name](file) — description` line in
+  // MEMORY.md, so a newline would forge extra index entries.
+  name: z
+    .string()
+    .min(3)
+    .max(64)
+    .regex(/^[^\n\r]+$/, 'no line breaks')
+    .describe('Short human-readable title for this memory.'),
   description: z
     .string()
     .min(10)
     .max(240)
+    .regex(/^[^\n\r]+$/, 'no line breaks')
     .describe('One-line description used to decide relevance in future sessions. Be specific.'),
   type: z
     .enum(MEMORY_TYPES)
@@ -32,6 +40,21 @@ const saveSchema = z.object({
     .max(10_000)
     .describe('Full markdown body of the memory (no frontmatter — it gets added).'),
 })
+
+// Serialize memory writes: readTopic→writeTopic and the index read-modify-write are
+// not atomic, so two concurrent memory.save calls could clobber a topic file or drop
+// an index entry (and the pid+ms tmp name can collide within a ms).
+// ponytail: one global lock, fine for infrequent memory writes; per-agent locks if
+// save throughput ever matters.
+let saveChain: Promise<unknown> = Promise.resolve()
+function serializeSave<T>(fn: () => Promise<T>): Promise<T> {
+  const run = saveChain.then(fn, fn)
+  saveChain = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
 
 export type MemorySaveArgs = z.infer<typeof saveSchema>
 
@@ -65,7 +88,10 @@ export function makeMemorySaveTool({
       'Save a durable fact, preference, or knowledge to long-term memory. Call proactively when you learn non-obvious things about the user or world. Skip derivable info (code patterns, git log, ephemeral state).',
     schema: saveSchema,
     handler: async args => {
-      const scan = scanForThreats(args.content)
+      // Scan name + description too, not just content: both are written verbatim
+      // into MEMORY.md, which is injected into every prompt — so an unscanned
+      // description is a persistent prompt-injection vector.
+      const scan = scanForThreats([args.name, args.description, args.content].join('\n\n'))
       if (!scan.ok) {
         return {
           ok: false,
@@ -73,28 +99,32 @@ export function makeMemorySaveTool({
         }
       }
 
-      const partition = partitionForType(args.type)
-      const slug = toSlug(args.name, args.type)
-      const dir = agentDir ?? agentPaths.agent(agentId).dir
-      const now = new Date().toISOString()
+      // The topic + index writes are serialized as one unit so concurrent saves
+      // can't interleave a read-modify-write and lose data.
+      const data = await serializeSave(async (): Promise<MemorySaveData> => {
+        const partition = partitionForType(args.type)
+        const slug = toSlug(args.name, args.type)
+        const dir = agentDir ?? agentPaths.agent(agentId).dir
+        const now = new Date().toISOString()
 
-      const existing = await readTopic(dir, partition, slug)
-      const isProfile = slug === PROFILE_SLUG && partition === 'user'
-      const topic: MemoryTopic = {
-        partition,
-        slug,
-        frontmatter: buildSaveFrontmatter(args, isProfile, existing, now),
-        body: existing ? mergeBody(existing.body, args.content, slug) : args.content,
-      }
-      await writeTopic(dir, topic)
+        const existing = await readTopic(dir, partition, slug)
+        const isProfile = slug === PROFILE_SLUG && partition === 'user'
+        const topic: MemoryTopic = {
+          partition,
+          slug,
+          frontmatter: buildSaveFrontmatter(args, isProfile, existing, now),
+          body: existing ? mergeBody(existing.body, args.content, slug) : args.content,
+        }
+        await writeTopic(dir, topic)
 
-      const indexPath = agentDir
-        ? join(agentDir, 'memory', 'MEMORY.md')
-        : agentPaths.agent(agentId).memoryIndex
-      const file = `${partition}/${slug}.md`
-      await upsertIndexEntry(indexPath, file, args.name, args.description)
+        const indexPath = agentDir
+          ? join(agentDir, 'memory', 'MEMORY.md')
+          : agentPaths.agent(agentId).memoryIndex
+        const file = `${partition}/${slug}.md`
+        await upsertIndexEntry(indexPath, file, args.name, args.description)
 
-      const data: MemorySaveData = { file, partition, slug, updated: existing !== null }
+        return { file, partition, slug, updated: existing !== null }
+      })
       return { ok: true, data }
     },
   }

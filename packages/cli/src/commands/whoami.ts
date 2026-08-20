@@ -10,6 +10,7 @@
 
 import { deriveAgentAddress, makeSuiClient, resolveOwnerVault } from 'lyra-plugin-onchain'
 import { resolveNetwork } from '../config/defaults'
+import { findAndLoadConfig } from '../config/load'
 
 export async function runWhoami(opts: { owner?: string }): Promise<void> {
   const owner = opts.owner ?? process.env.LYRA_OWNER_ADDRESS
@@ -26,7 +27,11 @@ export async function runWhoami(opts: { owner?: string }): Promise<void> {
     process.exit(1)
     return
   }
-  const network = resolveNetwork()
+  // Prefer the persisted config network (like `status`/`chat`); fall back to the
+  // env/default only when no config exists. Previously this always used the env
+  // default (mainnet), so a testnet agent was queried on mainnet.
+  const found = await findAndLoadConfig().catch(() => null)
+  const network = found?.config.network ?? resolveNetwork()
   const client = makeSuiClient(network)
   const [bal, ov] = await Promise.all([
     client.getBalance({ owner: agent }).catch(() => null),

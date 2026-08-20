@@ -59,6 +59,7 @@ export class OpenAIBrain implements Brain {
   private readonly apiKey: string
   private readonly model: string
   private ready = false
+  private initPromise: Promise<void> | null = null
   private readonly histories = new Map<string, BrainMessage[]>()
   private readonly lastUsage = new Map<string, BrainTurn['usage']>()
   private readonly renderedPrefix: string
@@ -83,8 +84,13 @@ export class OpenAIBrain implements Brain {
 
   async init(): Promise<void> {
     if (this.ready) return
-    this.ready = true
-    await this.hydrateFromPersist()
+    // Cache the in-flight hydration and flip `ready` only AFTER it resolves, so a
+    // concurrent second infer() awaits the same load instead of racing ahead on an
+    // empty history (which the hydrate's `length > 0` guard would then refuse to fill).
+    this.initPromise ??= this.hydrateFromPersist().then(() => {
+      this.ready = true
+    })
+    await this.initPromise
   }
 
   private async hydrateFromPersist(): Promise<void> {
@@ -359,9 +365,14 @@ export class OpenAIBrain implements Brain {
     userText: string,
     turnResult: BrainTurn | null,
   ): Promise<BrainTurn> {
+    // The reply the caller relays MUST equal the text recorded as the final
+    // assistant message. On a runaway-cap halt the halting notice is pushed AFTER
+    // the last completion, so returning `turnResult.content` (the last completion,
+    // often empty) would drop it and the operator would see a blank reply.
     const finalAssistant = findLastAssistantContent(messages)
+    const finalContent = finalAssistant ? sanitizeDashes(finalAssistant) : finalAssistant
     const userMsg: BrainMessage = { role: 'user', content: userText }
-    const assistantMsg: BrainMessage = { role: 'assistant', content: finalAssistant }
+    const assistantMsg: BrainMessage = { role: 'assistant', content: finalContent }
     history.push(userMsg)
     history.push(assistantMsg)
 
@@ -375,10 +386,11 @@ export class OpenAIBrain implements Brain {
       }
     }
 
-    if (turnResult?.content) {
-      turnResult.content = sanitizeDashes(turnResult.content)
+    if (turnResult) {
+      turnResult.content = finalContent
+      return turnResult
     }
-    return turnResult ?? { content: null, toolCalls: [] }
+    return { content: finalContent ?? null, toolCalls: [] }
   }
 
   private async maybeCompact(channelKey: string, input: BrainInferInput): Promise<void> {
@@ -530,7 +542,8 @@ export class OpenAIBrain implements Brain {
         prompt_tokens_details?: { cached_tokens?: number }
       }
     }
-    const choice = json.choices[0]!
+    const choice = json.choices[0]
+    if (!choice) throw new Error('LLM returned no choices (empty choices array)')
     const msg = choice.message
     const rawContent = msg.content
     const reasoning = msg.reasoning_content
@@ -643,7 +656,12 @@ export function inferToolOk(content: string): boolean {
     if (typeof o.error === 'string' && o.error.length > 0) return false
     return true
   } catch {
-    return !content.toLowerCase().includes('error')
+    // Non-JSON tool output (e.g. MCP/shell tools) — infer failure from common
+    // markers, not just the literal "error", so "reverted", "not found", or
+    // "insufficient balance" aren't reported as success.
+    return !/\b(error|errored|failed|failure|revert|denied|rejected|not found|insufficient|invalid|abort)\b/i.test(
+      content,
+    )
   }
 }
 
